@@ -1,0 +1,16 @@
+# MCP 本地密钥配置（包含真实 API Key）
+agents/mcp/mcp.json
+
+# MCP 运行时配置（由 init-mcp-env 脚本从模板生成，包含真实密钥）
+agents/mcp/mcp.json
+env.json
+
+opencode.json
+
+# 注意：mcp.template.json 和 mcp-env.example.json 是模板文件，可以安全提交
+.DS_Store
+skills-lock.json
+temp_parse.py
+agents/skills/bid-to-tender-skills
+scripts/__pycache__/
+ide/codex/auth.json

@@ -1,0 +1,34 @@
+{
+  "default_mcp_settings": {
+    "use_idea_mcp": true,
+    "use_custom_mcp": true
+  },
+  "agent_servers": {
+    "TRAE CLI": {
+      "type": "custom",
+      "command": "traecli",
+      "args": [
+        "acp",
+        "serve"
+      ],
+      "env": {}
+    },
+    "我的codex": {
+      "command": "npx",
+      "args": [
+        "@zed-industries/codex-acp"
+      ]
+    },
+    "我的claude": {
+      "command": "npx",
+      "args": [
+        "@zed-industries/codex-acp-darwin-arm64"
+      ],
+      "env": {
+        "ACP_PERMISSION_MODE": "bypassPermissions"
+      },
+      "use_idea_mcp": true,
+      "use_custom_mcp": true
+    }
+  }
+}
