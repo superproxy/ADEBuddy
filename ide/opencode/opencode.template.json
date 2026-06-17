@@ -50,6 +50,22 @@
         "baseURL": "${LLM_VOLCENGINE_OPENAI_BASE_URL}",
         "apiKey": "${LLM_VOLCENGINE_OPENAI_API_KEY}"
       }
+    },
+    "volcengineCoding": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Volcengine Coding",
+      "options": {
+        "baseURL": "${LLM_VOLCENGINECODING_OPENAI_BASE_URL}",
+        "apiKey": "${LLM_VOLCENGINECODING_OPENAI_API_KEY}"
+      }
+    },
+    "volcengineAgent": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Volcengine Agent",
+      "options": {
+        "baseURL": "${LLM_VOLCENGINEAGENT_OPENAI_BASE_URL}",
+        "apiKey": "${LLM_VOLCENGINEAGENT_OPENAI_API_KEY}"
+      }
     }
   },
   "model": "${ANTHROPIC_MODEL:-anthropic/claude-sonnet-4}",
