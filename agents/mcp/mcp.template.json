@@ -192,7 +192,7 @@
       },
       "disabled": true
     },
-     
+
     "seedance-mcp-server": {
       "command": "uvx",
       "args": [
@@ -215,6 +215,18 @@
       }
       ,
       "disabled": false
-    }
+    },
+
+      "undoom-douyin-data-analysis": {
+        "command": "uvx",
+        "args": [
+          "--index-url",
+          "https://pypi.tuna.tsinghua.edu.cn/simple",
+          "--from",
+          "undoom-douyin-data-analysis",
+          "undoom-douyin-mcp"
+        ],
+        "disabled": "true"
+      }
   }
 }

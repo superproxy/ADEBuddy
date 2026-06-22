@@ -708,25 +708,37 @@ def init_cursor(target_dir: Path, source_rules_dir: Path, source_mcp_file: Path,
     return "cursor"
 
 
+def _get_ide_user_dir(ide_name: str) -> Path:
+    """获取 IDE 的 User 目录（跨平台）"""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / ide_name / "User"
+    elif sys.platform == "win32":
+        return Path.home() / "AppData" / "Roaming" / ide_name / "User"
+    else:
+        return Path.home() / ".config" / ide_name / "User"
+
+
 def init_trae(target_dir: Path, source_rules_dir: Path, source_mcp_file: Path,
               source_skills_dir: Path, source_agents_md: Path, force: bool) -> str | None:
     print(f"\n{COLOR_MAGENTA}--- Trae IDE ---{COLOR_RESET}")
 
-    trae_dir = target_dir / ".trae"
-    trae_rules_dir = trae_dir / "rules"
-    trae_mcp_file = target_dir / ".mcp.json"
-    trae_skills_dir = trae_dir / "skills"
+    # Trae 全局目录 ~/.trae/（跨平台通用，存 rules/skills）
+    trae_global_dir = Path.home() / ".trae"
+    trae_global_dir.mkdir(parents=True, exist_ok=True)
 
-    trae_dir.mkdir(parents=True, exist_ok=True)
+    trae_rules_dir = trae_global_dir / "rules"
+    trae_skills_dir = trae_global_dir / "skills"
 
     if source_rules_dir.exists():
-        copy_dir_safe(source_rules_dir, trae_rules_dir, ".trae/rules/", force)
+        copy_dir_safe(source_rules_dir, trae_rules_dir, "~/.trae/rules/", force)
     else:
         print(f"{COLOR_YELLOW}[!] Source rules/ not found, skipping{COLOR_RESET}")
 
-    copy_mcp_file_safe(source_mcp_file, trae_mcp_file, ".mcp.json", force)
+    # MCP 配置写到 IDE User 目录
+    trae_user_mcp = _get_ide_user_dir("Trae") / "mcp.json"
+    copy_mcp_file_safe(source_mcp_file, trae_user_mcp, f"Trae User/mcp.json", force)
 
-    copy_skills_safe(source_skills_dir, trae_skills_dir, ".trae/skills/", force)
+    copy_skills_safe(source_skills_dir, trae_skills_dir, "~/.trae/skills/", force)
 
     if source_skills_dir.exists():
         skill_count = sum(1 for d in source_skills_dir.iterdir() if d.is_dir())
@@ -738,30 +750,23 @@ def init_trae_cn(target_dir: Path, source_rules_dir: Path, source_mcp_file: Path
                  source_skills_dir: Path, source_agents_md: Path, force: bool) -> str | None:
     print(f"\n{COLOR_MAGENTA}--- Trae CN IDE ---{COLOR_RESET}")
 
-    trae_cn_dir = target_dir / ".trae-cn"
-    trae_cn_rules_dir = trae_cn_dir / "rules"
-    trae_cn_mcp_file = trae_cn_dir / "mcp.json"
-    trae_cn_skills_dir = trae_cn_dir / "skills"
+    # Trae-CN 全局目录 ~/.trae-cn/（跨平台通用，存 rules/skills）
+    trae_cn_global_dir = Path.home() / ".trae-cn"
+    trae_cn_global_dir.mkdir(parents=True, exist_ok=True)
 
-    trae_cn_dir.mkdir(parents=True, exist_ok=True)
+    trae_cn_rules_dir = trae_cn_global_dir / "rules"
+    trae_cn_skills_dir = trae_cn_global_dir / "skills"
 
     if source_rules_dir.exists():
-        copy_dir_safe(source_rules_dir, trae_cn_rules_dir, ".trae-cn/rules/", force)
+        copy_dir_safe(source_rules_dir, trae_cn_rules_dir, "~/.trae-cn/rules/", force)
     else:
         print(f"{COLOR_YELLOW}[!] Source rules/ not found, skipping{COLOR_RESET}")
 
-    copy_mcp_file_safe(source_mcp_file, trae_cn_mcp_file, ".trae-cn/mcp.json", force)
+    # MCP 配置写到 IDE User 目录
+    trae_cn_user_mcp = _get_ide_user_dir("Trae CN") / "mcp.json"
+    copy_mcp_file_safe(source_mcp_file, trae_cn_user_mcp, "Trae CN User/mcp.json", force)
 
-    # Trae-CN 同时在根目录放一份 .mcp.json
-    trae_cn_root_mcp = target_dir / ".mcp.json"
-    copy_mcp_file_safe(source_mcp_file, trae_cn_root_mcp, ".mcp.json (trae-cn root)", force)
-
-    # Trae-CN 应用目录（全局生效）
-    trae_cn_app_dir = Path.home() / "AppData" / "Roaming" / "Trae CN" / "User"
-    trae_cn_app_mcp = trae_cn_app_dir / "mcp.json"
-    copy_mcp_file_safe(source_mcp_file, trae_cn_app_mcp, "Trae CN AppData mcp.json", force)
-
-    copy_skills_safe(source_skills_dir, trae_cn_skills_dir, ".trae-cn/skills/", force)
+    copy_skills_safe(source_skills_dir, trae_cn_skills_dir, "~/.trae-cn/skills/", force)
 
     if source_skills_dir.exists():
         skill_count = sum(1 for d in source_skills_dir.iterdir() if d.is_dir())
@@ -773,28 +778,23 @@ def init_trae_solo_cn(target_dir: Path, source_rules_dir: Path, source_mcp_file:
                       source_skills_dir: Path, source_agents_md: Path, force: bool) -> str | None:
     print(f"\n{COLOR_MAGENTA}--- TRAE SOLO CN IDE ---{COLOR_RESET}")
 
-    trae_solo_cn_dir = target_dir / ".trae-solo-cn"
-    trae_solo_cn_rules_dir = trae_solo_cn_dir / "rules"
-    trae_solo_cn_mcp_file = trae_solo_cn_dir / "mcp.json"
-    trae_solo_cn_skills_dir = trae_solo_cn_dir / "skills"
+    # TRAE SOLO CN 全局目录 ~/.trae-solo-cn/（跨平台通用，存 rules/skills）
+    trae_solo_cn_global_dir = Path.home() / ".trae-solo-cn"
+    trae_solo_cn_global_dir.mkdir(parents=True, exist_ok=True)
 
-    trae_solo_cn_dir.mkdir(parents=True, exist_ok=True)
+    trae_solo_cn_rules_dir = trae_solo_cn_global_dir / "rules"
+    trae_solo_cn_skills_dir = trae_solo_cn_global_dir / "skills"
 
     if source_rules_dir.exists():
-        copy_dir_safe(source_rules_dir, trae_solo_cn_rules_dir, ".trae-solo-cn/rules/", force)
+        copy_dir_safe(source_rules_dir, trae_solo_cn_rules_dir, "~/.trae-solo-cn/rules/", force)
     else:
         print(f"{COLOR_YELLOW}[!] Source rules/ not found, skipping{COLOR_RESET}")
 
-    copy_mcp_file_safe(source_mcp_file, trae_solo_cn_mcp_file, ".trae-solo-cn/mcp.json", force)
+    # MCP 配置写到 IDE User 目录
+    trae_solo_cn_user_mcp = _get_ide_user_dir("TRAE SOLO CN") / "mcp.json"
+    copy_mcp_file_safe(source_mcp_file, trae_solo_cn_user_mcp, "TRAE SOLO CN User/mcp.json", force)
 
-    trae_solo_cn_root_mcp = target_dir / ".mcp.json"
-    copy_mcp_file_safe(source_mcp_file, trae_solo_cn_root_mcp, ".mcp.json (trae-solo-cn root)", force)
-
-    trae_solo_cn_app_dir = Path.home() / "AppData" / "Roaming" / "TRAE SOLO CN" / "User"
-    trae_solo_cn_app_mcp = trae_solo_cn_app_dir / "mcp.json"
-    copy_mcp_file_safe(source_mcp_file, trae_solo_cn_app_mcp, "TRAE SOLO CN AppData mcp.json", force)
-
-    copy_skills_safe(source_skills_dir, trae_solo_cn_skills_dir, ".trae-solo-cn/skills/", force)
+    copy_skills_safe(source_skills_dir, trae_solo_cn_skills_dir, "~/.trae-solo-cn/skills/", force)
 
     if source_skills_dir.exists():
         skill_count = sum(1 for d in source_skills_dir.iterdir() if d.is_dir())
@@ -1284,17 +1284,14 @@ def main() -> None:
         if key in processed:
             print(f"  {COLOR_DARKGRAY}{arch_lines[key]}{key}/rules/    --Copy--> agents/rules/{COLOR_RESET}")
     if "trae" in processed:
-        print(f"  {COLOR_DARKGRAY}.mcp.json            --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
+        mcp_path = _get_ide_user_dir("Trae") / "mcp.json"
+        print(f"  {COLOR_DARKGRAY}{mcp_path}  --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
     if "trae-cn" in processed:
-        print(f"  {COLOR_DARKGRAY}.trae-cn/mcp.json    --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
-        print(f"  {COLOR_DARKGRAY}.mcp.json (trae-cn)  --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
-        appdata_path = Path.home() / "AppData" / "Roaming" / "Trae CN" / "User" / "mcp.json"
-        print(f"  {COLOR_DARKGRAY}{appdata_path}  --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
+        mcp_path = _get_ide_user_dir("Trae CN") / "mcp.json"
+        print(f"  {COLOR_DARKGRAY}{mcp_path}  --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
     if "trae-solo-cn" in processed:
-        print(f"  {COLOR_DARKGRAY}.trae-solo-cn/mcp.json    --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
-        print(f"  {COLOR_DARKGRAY}.mcp.json (trae-solo-cn)  --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
-        appdata_path = Path.home() / "AppData" / "Roaming" / "TRAE SOLO CN" / "User" / "mcp.json"
-        print(f"  {COLOR_DARKGRAY}{appdata_path}  --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
+        mcp_path = _get_ide_user_dir("TRAE SOLO CN") / "mcp.json"
+        print(f"  {COLOR_DARKGRAY}{mcp_path}  --Copy--> agents/mcp/mcp.json{COLOR_RESET}")
     if "cursor" in processed:
         print(f"  {COLOR_DARKGRAY}.cursor/mcp.json     (generated, mcpServers key){COLOR_RESET}")
     if "codex" in processed:
