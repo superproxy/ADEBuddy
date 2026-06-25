@@ -1,4 +1,4 @@
-model_provider = "OpenAI"
+model_provider = "${LLM_ACTIVE_PROVIDER}"
 model = "${OPENAI_MODEL:-gpt-5.4}"
 review_model = "${OPENAI_MODEL:-gpt-5.4}"
 model_reasoning_effort = "high"
@@ -6,8 +6,8 @@ disable_response_storage = true
 network_access = "enabled"
 windows_wsl_setup_acknowledged = true
 
-[model_providers.OpenAI]
-name = "OpenAI"
+[model_providers.${LLM_ACTIVE_PROVIDER}]
+name = "${LLM_ACTIVE_PROVIDER}"
 base_url = "${LLM_ACTIVE_BASE_URL}"
 wire_api = "responses"
 requires_openai_auth = true
