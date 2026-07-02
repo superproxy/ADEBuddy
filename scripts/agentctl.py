@@ -52,7 +52,7 @@ def cmd_generate(args):
         if args.provider:
             env_config = llm.switch_provider(
                 env_config, args.provider, args.protocol,
-                PROJECT_ROOT / "llm.yaml"
+                PROJECT_ROOT / "agents" / "llm" / "llm.yaml"
             )
         elif args.protocol:
             active = llm.get_active_provider(env_config)
@@ -74,11 +74,13 @@ def cmd_generate(args):
     print(f"  {COLOR_GREEN}Active LLM: {active_provider}/{'|'.join(active_protocols)}{COLOR_RESET}")
     print()
 
-    # 1. 生成 mcp.json（从 mcp.yaml + plugins/*.plugin.yaml 合并 mcpServers）
-    mcp_yaml_file = PROJECT_ROOT / "mcp.yaml"
+    # 1. 生成 mcp.json（从 mcp.yaml + 已安装插件的 mcpServers 合并）
+    mcp_yaml_file = PROJECT_ROOT / "agents" / "mcp" / "mcp.yaml"
     mcp_output = PROJECT_ROOT / "agents" / "mcp" / "mcp.json"
     plugins_dir = PROJECT_ROOT / "agents" / "plugins"
-    mcp.invoke_mcp_generate_step(flat_config, mcp_yaml_file, mcp_output, plugins_dir=plugins_dir)
+    installed = plugins.read_installed_plugins(PROJECT_ROOT)
+    mcp.invoke_mcp_generate_step(flat_config, mcp_yaml_file, mcp_output,
+                                  plugins_dir=plugins_dir, installed_names=installed)
 
     # 2. 生成 opencode.json（从模板 + 注入模型）
     opencode_template = PROJECT_ROOT / "ide" / "opencode" / "opencode.template.json"
@@ -115,8 +117,35 @@ def cmd_generate(args):
     print(f"{COLOR_CYAN}========================================{COLOR_RESET}")
 
 
+def _warn_if_mcp_stale(mcp_json: Path) -> None:
+    """检测 mcp.json 是否比 mcp.yaml / plugins/*.plugin.yaml 旧，是则提示先 generate。"""
+    if not mcp_json.exists():
+        print(f"{COLOR_YELLOW}[!] mcp.json not found, run `agentctl generate` first{COLOR_RESET}")
+        return
+    target_mtime = mcp_json.stat().st_mtime
+    stale_sources = []
+    mcp_yaml = PROJECT_ROOT / "agents" / "mcp" / "mcp.yaml"
+    if mcp_yaml.exists() and mcp_yaml.stat().st_mtime > target_mtime:
+        stale_sources.append("agents/mcp/mcp.yaml")
+    plugins_dir = PROJECT_ROOT / "agents" / "plugins"
+    if plugins_dir.exists():
+        for p in plugins_dir.glob("*.plugin.yaml"):
+            if p.stat().st_mtime > target_mtime:
+                stale_sources.append(p.name)
+                break
+    if stale_sources:
+        print(f"{COLOR_YELLOW}[!] mcp.json is stale ({', '.join(stale_sources)} changed). "
+              f"Run `agentctl generate` before sync to include latest plugin mcpServers.{COLOR_RESET}")
+
+
 def cmd_sync(args):
-    """同步 rules/mcp/skills 到各 IDE。"""
+    """同步 rules/mcp/skills 到各 IDE。
+
+    sync 会自动完成：
+      1. 合并 mcp.yaml + 已安装插件 mcpServers → 全局 mcp.json
+      2. 合并 agents/skills/ + .agents/skills/ → IDE skills 目录
+      3. 同步 mcp.json + skills + rules 到各 IDE
+    """
     # 解析 scope
     scope = set(s.strip() for s in args.scope.split(",") if s.strip())
     # 解析 skills 白名单
@@ -131,7 +160,44 @@ def cmd_sync(args):
 
     source_rules = PROJECT_ROOT / "agents" / "rules"
     source_mcp = PROJECT_ROOT / "agents" / "mcp" / "mcp.json"
-    source_skills = PROJECT_ROOT / "agents" / "skills"
+    mcp_yaml_file = PROJECT_ROOT / "agents" / "mcp" / "mcp.yaml"
+    plugins_dir = PROJECT_ROOT / "agents" / "plugins"
+
+    # sync 前自动刷新 mcp.json：合并 mcp.yaml + 已安装插件 mcpServers
+    # 这样 sync 就是完整的「关联 mcp + skill → 全局 → IDE」流程
+    if "mcp" in scope and mcp_yaml_file.exists():
+        installed = plugins.read_installed_plugins(PROJECT_ROOT)
+        # 读取 flat_config 用于占位符替换
+        flat_config = {}
+        llm_yaml = PROJECT_ROOT / "agents" / "llm" / "llm.yaml"
+        if llm_yaml.exists():
+            try:
+                env_config = llm.load_split_env_config(PROJECT_ROOT)
+                active_provider = llm.get_active_provider(env_config)
+                active_protocols = llm.get_active_protocols(env_config)
+                flat_config = llm.flatten_env_config(env_config, active_provider, active_protocols)
+            except Exception:
+                pass
+        mcp.refresh_mcp_json(mcp_yaml_file, source_mcp, plugins_dir, installed, flat_config)
+
+    # skill 源：agents/skills/（源/内置）+ .agents/skills/（plugin 安装的，补充）
+    source_skills = [PROJECT_ROOT / "agents" / "skills"]
+    plugin_skills = PROJECT_ROOT / ".agents" / "skills"
+    if plugin_skills.exists():
+        source_skills.append(plugin_skills)
+
+    # 从 skill.yaml 读取启用清单，只同步启用的 skill
+    skill_yaml = PROJECT_ROOT / "agents" / "skills" / "skill.yaml"
+    if "skill" in scope and skill_yaml.exists():
+        enabled_set = skills.get_enabled_skills(skill_yaml)
+        if enabled_set:
+            # 合并命令行 --skills 白名单和 skill.yaml 的 enabled
+            if include:
+                include = include & enabled_set
+            else:
+                include = enabled_set
+            hint(f"skill.yaml enabled: {len(enabled_set)} skill(s)")
+
     source_agents_md = PROJECT_ROOT / "AGENTS.md"
 
     for t in targets:
@@ -208,10 +274,55 @@ def cmd_plugin_list(args):
     plugins.list_plugins(plugins_dir)
 
 
+def cmd_plugin_uninstall(args):
+    """卸载插件。"""
+    plugin_path = Path(args.plugin_file).resolve()
+    env_path = PROJECT_ROOT / args.env_file
+    plugins.uninstall_plugin(
+        plugin_path, env_path, PROJECT_ROOT,
+        remove_plugin_file=args.purge,
+    )
+
+
 def cmd_skill_list(args):
     """从 skills-index.csv 列出所有技能。"""
     csv_path = PROJECT_ROOT / args.csv
     plugins.list_skills_from_csv(csv_path)
+
+
+def cmd_skill_enable(args):
+    """启用技能（加入 skill.yaml 的 enabled 列表）。"""
+    skill_yaml = PROJECT_ROOT / "agents" / "skills" / "skill.yaml"
+    added = skills.enable_skill(skill_yaml, args.skill_name)
+    if added:
+        print(f"{COLOR_GREEN}[OK] 已启用技能: {args.skill_name}{COLOR_RESET}")
+    else:
+        print(f"{COLOR_DARKGRAY}[~] 技能已启用: {args.skill_name}{COLOR_RESET}")
+
+
+def cmd_skill_disable(args):
+    """禁用技能（从 skill.yaml 的 enabled 列表移除）。"""
+    skill_yaml = PROJECT_ROOT / "agents" / "skills" / "skill.yaml"
+    removed = skills.disable_skill(skill_yaml, args.skill_name)
+    if removed:
+        print(f"{COLOR_GREEN}[OK] 已禁用技能: {args.skill_name}{COLOR_RESET}")
+    else:
+        print(f"{COLOR_DARKGRAY}[~] 技能未启用: {args.skill_name}{COLOR_RESET}")
+
+
+def cmd_skill_scan(args):
+    """扫描本地技能，显示状态。"""
+    skill_yaml = PROJECT_ROOT / "agents" / "skills" / "skill.yaml"
+    all_skills = skills.scan_local_skills(PROJECT_ROOT)
+    enabled_set = skills.get_enabled_skills(skill_yaml)
+
+    print(f"{COLOR_CYAN}{'=' * 40}{COLOR_RESET}")
+    print(f"{COLOR_CYAN}  本地技能清单{COLOR_RESET}")
+    print(f"{COLOR_CYAN}{'=' * 40}{COLOR_RESET}")
+    print(f"\n共 {len(all_skills)} 个技能，{len(enabled_set)} 个已启用:\n")
+    for name in all_skills:
+        status = f"{COLOR_GREEN}[启用]{COLOR_RESET}" if name in enabled_set else f"{COLOR_DARKGRAY}[禁用]{COLOR_RESET}"
+        print(f"  {status} {name}")
 
 
 def cmd_skill_gen_plugin(args):
@@ -225,51 +336,39 @@ def cmd_skill_gen_plugin(args):
 
 
 def cmd_setup(args):
-    """一键全流程：plugin install all → generate → sync。
+    """一键全流程：generate → sync（同步全局 agents/ 资源到 IDE）。
 
-    顺序说明（对应 plugin 工作流程）：
-      1. plugin install all
-         - 执行各插件的 install 脚本
-         - 下载 skill 到 agents/skills/
-         - 合并 envVars 到 llm.yaml
-         （plugin.yaml 的 mcpServers 不在此阶段合并，保持 mcp.yaml 纯净）
-      2. generate
-         - 同时读取 mcp.yaml + agents/plugins/*.plugin.yaml 的 mcpServers，合并生成 mcp.json
+    agents/ 是全局基础设施（rules/skills/mcp/commands），开箱即用。
+    插件（agents/plugins/）是用户按需追加的扩展，不在此流程自动安装。
+    用户需通过 `agentctl plugin install <file>` 单独安装插件。
+
+    流程：
+      1. generate
+         - 从 mcp.yaml + agents/plugins/*.plugin.yaml 合并生成 mcp.json
          - 生成各 IDE 模板配置（opencode/codex/claude）
-      3. sync All
-         - 同步 mcp.json 到各 IDE（mcp 同步）
-         - 同步 skills 到各 IDE（skill 同步）
+      2. sync All
+         - 同步 rules/mcp/skills 到各 IDE
     """
-    header("Setup: Full Pipeline")
+    header("Setup: Generate + Sync global agents/ resources")
 
-    # Step 1: 安装所有插件（执行 install 脚本 → 下载 skill → 合并 envVars）
-    print(f"\n{COLOR_CYAN}==> Step 1/3: Install all plugins{COLOR_RESET}")
-    plugins_dir = PROJECT_ROOT / "agents" / "plugins"
-    if plugins_dir.exists():
-        for p in sorted(plugins_dir.glob("*.plugin.yaml")):
-            print(f"\n{COLOR_CYAN}--- Installing: {p.name} ---{COLOR_RESET}")
-            plugins.install_plugin(
-                p, PROJECT_ROOT / "llm.yaml", PROJECT_ROOT,
-                dry_run=False, use_symlink=False
-            )
-    else:
-        warn(f"Plugins dir not found: {plugins_dir}")
-
-    # Step 2: 生成运行态配置（基于合并后的 llm.yaml + mcp.yaml）
-    print(f"\n{COLOR_CYAN}==> Step 2/3: Generate runtime configs{COLOR_RESET}")
+    # Step 1: 生成运行态配置
+    print(f"\n{COLOR_CYAN}==> Step 1/2: Generate runtime configs{COLOR_RESET}")
     ns_gen = argparse.Namespace(provider=None, protocol=None)
     cmd_generate(ns_gen)
 
-    # Step 3: 同步到所有 IDE（mcp 同步 + skill 同步）
-    print(f"\n{COLOR_CYAN}==> Step 3/3: Sync to all IDEs{COLOR_RESET}")
+    # Step 2: 同步到所有 IDE
+    print(f"\n{COLOR_CYAN}==> Step 2/2: Sync to all IDEs{COLOR_RESET}")
     ns_sync = argparse.Namespace(
-        ide="All", force=True, scope="llm,mcp,skill,plugin,rules", skills=""
+        ide="All", force=True, scope="llm,mcp,skill,rules", skills=""
     )
     cmd_sync(ns_sync)
 
     print(f"\n{COLOR_GREEN}========================================{COLOR_RESET}")
     print(f"{COLOR_GREEN}  Setup Complete!{COLOR_RESET}")
     print(f"{COLOR_GREEN}========================================{COLOR_RESET}")
+    print(f"\n{COLOR_DARKGRAY}提示：如需扩展功能，可安装插件：{COLOR_RESET}")
+    print(f"  {COLOR_WHITE}agentctl plugin install agents/plugins/<name>.plugin.yaml{COLOR_RESET}")
+    print(f"  {COLOR_WHITE}agentctl plugin list  # 查看可用插件{COLOR_RESET}")
 
 
 # ============================================================
@@ -328,7 +427,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_ins = p_plugin_sub.add_parser("install", help="安装插件")
     p_ins.add_argument("plugin_file", help="插件 .plugin.yaml 文件路径")
-    p_ins.add_argument("--env-file", default="llm.yaml", help="环境变量文件（默认 llm.yaml）")
+    p_ins.add_argument("--env-file", default="agents/llm/llm.yaml", help="环境变量文件（默认 agents/llm/llm.yaml）")
     p_ins.add_argument("--dry-run", action="store_true", help="模拟运行")
     p_ins.add_argument("--symlink", action="store_true",
                        help="使用 symlink 安装 skill（默认 --copy）")
@@ -338,6 +437,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_lst.add_argument("--plugins-dir", default="agents/plugins",
                        help="插件目录（默认 agents/plugins）")
     p_lst.set_defaults(func=cmd_plugin_list)
+
+    p_uns = p_plugin_sub.add_parser("uninstall", help="卸载插件（移除已安装的 skill 和 envVars）")
+    p_uns.add_argument("plugin_file", help="插件 .plugin.yaml 文件路径")
+    p_uns.add_argument("--env-file", default="agents/llm/llm.yaml", help="环境变量文件（默认 agents/llm/llm.yaml）")
+    p_uns.add_argument("--purge", action="store_true",
+                       help="同时删除插件 .plugin.yaml 文件本身")
+    p_uns.set_defaults(func=cmd_plugin_uninstall)
 
     # skill
     p_skill = sub.add_parser("skill", help="技能管理（基于 skills-index.csv）")
@@ -358,8 +464,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_sg.add_argument("--category", default=None, help="按分类过滤")
     p_sg.set_defaults(func=cmd_skill_gen_plugin)
 
+    p_se = p_skill_sub.add_parser("enable", help="启用技能（加入 skill.yaml enabled 列表）")
+    p_se.add_argument("skill_name", help="技能名称")
+    p_se.set_defaults(func=cmd_skill_enable)
+
+    p_sd = p_skill_sub.add_parser("disable", help="禁用技能（从 skill.yaml enabled 列表移除）")
+    p_sd.add_argument("skill_name", help="技能名称")
+    p_sd.set_defaults(func=cmd_skill_disable)
+
+    p_sc = p_skill_sub.add_parser("scan", help="扫描本地技能，显示启用状态")
+    p_sc.set_defaults(func=cmd_skill_scan)
+
     # setup
-    p_setup = sub.add_parser("setup", help="一键全流程：generate + plugin install all + sync")
+    p_setup = sub.add_parser("setup", help="一键全流程：generate + sync（不含插件安装）")
     p_setup.set_defaults(func=cmd_setup)
 
     return parser

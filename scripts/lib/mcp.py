@@ -94,13 +94,14 @@ def invoke_generate_step(
     print()
 
 
-def collect_plugin_mcp_servers(plugins_dir: Path) -> dict:
-    """扫描 agents/plugins/*.plugin.yaml，合并所有插件的 mcpServers。
+def collect_plugin_mcp_servers(plugins_dir: Path, installed_names: list = None) -> dict:
+    """扫描 agents/plugins/*.plugin.yaml，合并【已安装】插件的 mcpServers。
 
     plugin.yaml 中的 mcpServers 与 mcp.yaml 的 mcpServers 在 generate 阶段
     一起合并到 mcp.json，避免污染 mcp.yaml（保持 mcp.yaml 为用户手写的纯净源）。
 
     合并规则：
+    - 只合并 installed_names 清单中的插件（None 表示全部，向后兼容）
     - mcp.yaml 的 mcpServers 优先（用户手写覆盖插件默认）
     - plugin.yaml 的 mcpServers 作为补充（同名校验：若 mcp.yaml 已有则跳过）
     """
@@ -116,6 +117,12 @@ def collect_plugin_mcp_servers(plugins_dir: Path) -> dict:
         except Exception as e:
             print(f"{COLOR_YELLOW}[!] 跳过无法解析的插件 {p.name}: {e}{COLOR_RESET}")
             continue
+
+        # 只合并已安装的插件
+        plugin_name = cfg.get("name", "")
+        if installed_names is not None and plugin_name not in installed_names:
+            continue
+
         servers = cfg.get("mcpServers", {})
         if not isinstance(servers, dict):
             continue
@@ -133,10 +140,12 @@ def invoke_mcp_generate_step(
     mcp_yaml_file: Path,
     output_file: Path,
     plugins_dir: Path | None = None,
+    installed_names: list | None = None,
 ) -> None:
-    """从 mcp.yaml + plugins/*.plugin.yaml 合并 mcpServers，替换占位符后生成 mcp.json。
+    """从 mcp.yaml + 已安装插件的 mcpServers 合并生成 mcp.json。
 
-    合并优先级：mcp.yaml（用户手写）> plugin.yaml（插件默认）。
+    合并优先级：mcp.yaml（用户手写）> plugin.yaml（插件默认，仅已安装插件）。
+    installed_names 为 None 时向后兼容（合并全部插件）。
     """
     print(f"{COLOR_CYAN}========================================{COLOR_RESET}")
     print(f"{COLOR_CYAN}  Step: Generate mcp.json from mcp.yaml + plugins{COLOR_RESET}")
@@ -161,10 +170,10 @@ def invoke_mcp_generate_step(
 
     mcp_servers = mcp_data.get("mcpServers", {}) if isinstance(mcp_data, dict) else {}
 
-    # 合并 plugin.yaml 的 mcpServers（mcp.yaml 优先）
+    # 合并已安装插件的 mcpServers（mcp.yaml 优先）
     if plugins_dir:
         print(f"{COLOR_CYAN}--- Merging plugin mcpServers ---{COLOR_RESET}")
-        plugin_servers = collect_plugin_mcp_servers(plugins_dir)
+        plugin_servers = collect_plugin_mcp_servers(plugins_dir, installed_names)
         for name, cfg in plugin_servers.items():
             if name not in mcp_servers:
                 mcp_servers[name] = cfg
@@ -225,6 +234,65 @@ def invoke_mcp_generate_step(
     print()
     print(f"  {COLOR_CYAN}Result: {replaced} placeholder(s) replaced, output={output_file}{COLOR_RESET}")
     print()
+
+
+def refresh_mcp_json(
+    mcp_yaml_file: Path,
+    output_file: Path,
+    plugins_dir: Path | None = None,
+    installed_names: list | None = None,
+    flat_config: dict | None = None,
+) -> None:
+    """轻量级 mcp.json 刷新：合并 mcp.yaml + 已安装插件 mcpServers → mcp.json。
+
+    供 sync 调用，确保同步前 mcp.json 包含最新已安装插件的 mcpServers。
+    与 invoke_mcp_generate_step 的差异：不打印大段 header，占位符替换可选。
+    """
+    if not mcp_yaml_file.exists():
+        return
+
+    try:
+        mcp_data = load_env_config_file(mcp_yaml_file) or {}
+    except Exception:
+        return
+
+    mcp_servers = mcp_data.get("mcpServers", {}) if isinstance(mcp_data, dict) else {}
+
+    # 合并已安装插件的 mcpServers
+    if plugins_dir and plugins_dir.exists():
+        plugin_servers = collect_plugin_mcp_servers(plugins_dir, installed_names)
+        for name, cfg in plugin_servers.items():
+            if name not in mcp_servers:
+                mcp_servers[name] = cfg
+
+    # 过滤 disabled
+    enabled_servers = {
+        name: cfg for name, cfg in mcp_servers.items()
+        if not (isinstance(cfg, dict) and (cfg.get("disabled") is True or cfg.get("disabled") == "true"))
+    }
+
+    template_content = json.dumps({"mcpServers": enabled_servers}, indent=2, ensure_ascii=False) + "\n"
+
+    # 占位符替换（如果提供了 flat_config）
+    if flat_config:
+        env_map = {k: str(v) if v is not None else "" for k, v in flat_config.items()}
+        for key, value in env_map.items():
+            placeholder = "${" + key + "}"
+            if placeholder in template_content:
+                template_content = template_content.replace(placeholder, value)
+        # 默认值占位符
+        for m in re.finditer(r"\$\{(\w+):-(.*?)\}", template_content):
+            var_name = m.group(1)
+            default_value = m.group(2)
+            full_match = m.group(0)
+            resolved = env_map.get(var_name, default_value)
+            template_content = template_content.replace(full_match, resolved)
+        # 剪枝未解析的占位符
+        template_content, _ = prune_unresolved_blocks(template_content)
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(template_content, encoding="utf-8")
+    print(f"{COLOR_GREEN}[OK] mcp.json refreshed (mcp.yaml + {len(installed_names or [])} installed plugins){COLOR_RESET}")
 
 
 def _inject_opencode_models(opencode_file: Path, env_config: dict) -> None:
@@ -417,18 +485,40 @@ def convert_to_cursor_mcp(source_file: Path, target_file: Path, force: bool) -> 
     print(f"{COLOR_GREEN}[OK] Cursor MCP generated: {target_file}{COLOR_RESET}")
 
 
+def _strip_mcp_sections(text: str) -> str:
+    """从 TOML 文本中剔除所有 [mcp_servers.*] 段，保留其他段。"""
+    merged_lines = []
+    in_mcp_section = False
+    for line in text.splitlines(keepends=False):
+        stripped = line.strip()
+        if stripped.startswith("[mcp_servers."):
+            in_mcp_section = True
+            continue
+        if in_mcp_section:
+            # 进入下一个非 mcp 段或空行时结束跳过
+            if stripped.startswith("[") or stripped == "":
+                in_mcp_section = False
+                merged_lines.append(line)
+            continue
+        merged_lines.append(line)
+    return "\n".join(merged_lines).rstrip("\n")
+
+
 def convert_to_codex_mcp(source_file: Path, target_file: Path, force: bool,
                          template_file: Path | None = None) -> None:
-    """生成 Codex 格式 config.toml（[mcp_servers.X] 段）。"""
+    """生成 Codex 格式 config.toml（[mcp_servers.X] 段）。
+
+    base 内容优先级：target_file（已存在）> template_file > 默认 header。
+    只替换 [mcp_servers.*] 段，保留 model_provider / model 等其他配置。
+    不 unlink target，避免丢失 base 内容。
+    """
     if not source_file.exists():
         print(f"{COLOR_YELLOW}[!] MCP source not found: {source_file}{COLOR_RESET}")
         return
 
-    if target_file.exists():
-        if not force:
-            print(f"{COLOR_YELLOW}[!] Codex MCP already exists, use --force to overwrite{COLOR_RESET}")
-            return
-        target_file.unlink()
+    if target_file.exists() and not force:
+        print(f"{COLOR_YELLOW}[!] Codex MCP already exists, use --force to overwrite{COLOR_RESET}")
+        return
 
     with open(source_file, "r", encoding="utf-8") as f:
         content = json.load(f)
@@ -461,28 +551,19 @@ def convert_to_codex_mcp(source_file: Path, target_file: Path, force: bool,
 
     target_file.parent.mkdir(parents=True, exist_ok=True)
 
-    if template_file and template_file.exists():
-        template_text = template_file.read_text(encoding="utf-8")
-        merged_lines = []
-        in_mcp_section = False
-        for line in template_text.splitlines(keepends=False):
-            stripped = line.strip()
-            if stripped.startswith("[mcp_servers."):
-                in_mcp_section = True
-                continue
-            if in_mcp_section:
-                if stripped.startswith("[") or stripped == "":
-                    in_mcp_section = False
-                    merged_lines.append(line)
-                continue
-            merged_lines.append(line)
+    # 选择 base 文本：target 优先（保留运行态），其次 template
+    base_text = None
+    if target_file.exists():
+        base_text = target_file.read_text(encoding="utf-8")
+    elif template_file and template_file.exists():
+        base_text = template_file.read_text(encoding="utf-8")
 
-        merged_text = "\n".join(merged_lines).rstrip("\n")
-        if merged_text and not merged_text.endswith("\n\n"):
-            merged_text += "\n"
-        merged_text += "\n" + "\n".join(mcp_lines)
-        with open(target_file, "w", encoding="utf-8") as f:
-            f.write(merged_text + "\n")
+    if base_text and base_text.strip():
+        base_text = _strip_mcp_sections(base_text)
+        if base_text:
+            merged_text = base_text + "\n\n" + "\n".join(mcp_lines)
+        else:
+            merged_text = "\n".join(mcp_lines)
     else:
         lines = [
             "# Codex MCP Configuration",
@@ -490,8 +571,10 @@ def convert_to_codex_mcp(source_file: Path, target_file: Path, force: bool,
             "",
         ]
         lines.extend(mcp_lines)
-        with open(target_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
+        merged_text = "\n".join(lines)
+
+    with open(target_file, "w", encoding="utf-8") as f:
+        f.write(merged_text + "\n")
 
     print(f"{COLOR_GREEN}[OK] Codex MCP generated: {target_file}{COLOR_RESET}")
 

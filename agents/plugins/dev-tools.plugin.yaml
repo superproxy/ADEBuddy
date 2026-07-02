@@ -2,7 +2,24 @@ name: dev-tools
 version: 1.0.0
 description: 开发工具插件 - 提供 RESTful API 设计、测试、代码审查等能力
 author: MyAgentPlugin
-mcpServers: {}
+mcpServers:
+  context7:
+    type: http
+    url: https://mcp.context7.com/mcp
+    headers:
+      CONTEXT7_API_KEY: ''
+    disabled: false
+  filesystem:
+    command: npx
+    args:
+      - -y
+      - '@modelcontextprotocol/server-filesystem'
+      - ./
+    env: {}
+    disabled: false
+  openaiDeveloperDocs:
+    url: https://developers.openai.com/mcp
+    disabled: true
 skills:
   - { name: restful-api-design-skill, description: RESTful API 设计与接口契约 }
   - { name: systematic-debugging, description: 系统化调试方法论 }

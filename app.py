@@ -98,7 +98,6 @@ def _bootstrap_from_bundle() -> None:
 
     resources = [
         "scripts", "agents", "tools", "ide",
-        "llm-env-example.yaml", "mcp-env-example.yaml",
         "AGENTS.md",
     ]
     copied = []

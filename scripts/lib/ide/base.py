@@ -16,8 +16,8 @@ from lib.mcp import copy_dir_safe, copy_file_safe, copy_mcp_file_safe
 from lib.skills import copy_skills_safe, write_skills_index
 
 
-# 默认同步范围（与原 init-ide.py 的 SCOPE 全局变量一致）
-DEFAULT_SCOPE = {"llm", "mcp", "skill", "plugin", "rules"}
+# 默认同步范围（plugin 的 mcp/skill 已分别并入 mcp/skill 阶段处理）
+DEFAULT_SCOPE = {"llm", "mcp", "skill", "rules"}
 
 
 def get_ide_user_dir(ide_name: str) -> Path:

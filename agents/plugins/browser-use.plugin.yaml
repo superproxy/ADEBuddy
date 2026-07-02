@@ -4,7 +4,13 @@ description: 电脑操作插件 - 提供浏览器自动化和桌面操作能力
 author: MyAgentPlugin
 scripts:
   install: npm i -g open-browser-use && open-browser-use setup
-mcpServers: {}
+mcpServers:
+  playwright:
+    command: npx
+    args:
+      - '@playwright/mcp@latest'
+    name: playwright
+    disabled: true
 skills:
   - name: open-browser-use
     source: iFurySt/open-browser-use

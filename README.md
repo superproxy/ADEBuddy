@@ -10,10 +10,10 @@
 
 ```bash
 # 1) 复制密钥模板（拆分为两个文件）
-cp llm-env-example.yaml llm.yaml
-cp mcp-env-example.yaml mcp.yaml
+cp agents/llm/llm-env-example.yaml agents/llm/llm.yaml
+cp agents/mcp/mcp-env-example.yaml agents/mcp/mcp.yaml
 
-# 2) 编辑 llm.yaml / mcp.yaml，填入真实 API Key（也可留空，由 OS 环境变量回退）
+# 2) 编辑 agents/llm/llm.yaml / agents/mcp/mcp.yaml，填入真实 API Key（也可留空，由 OS 环境变量回退）
 
 # 3) 一键全量初始化（生成配置 + 安装插件 + 同步所有 IDE）
 .\install.cmd      # Windows
@@ -385,9 +385,9 @@ python scripts/agentctl.py plugin install agents/plugins/core.plugin.yaml --dry-
 ```bash
 git clone <repo>
 cd MyAgentPlugin
-cp llm-env-example.yaml llm.yaml
-cp mcp-env-example.yaml mcp.yaml
-# 编辑 llm.yaml / mcp.yaml 填密钥
+cp agents/llm/llm-env-example.yaml agents/llm/llm.yaml
+cp agents/mcp/mcp-env-example.yaml agents/mcp/mcp.yaml
+# 编辑 agents/llm/llm.yaml / agents/mcp/mcp.yaml 填密钥
 ./install.sh
 ```
 
@@ -442,8 +442,8 @@ python scripts/agentctl.py sync -i All -f
 
 | 文件 | 提交？ | 说明 |
 |------|--------|------|
-| `llm-env-example.yaml` / `mcp-env-example.yaml` | ✅ | 仅占位 |
-| `llm.yaml` / `mcp.yaml` | ❌ | 含真实密钥（已在 `.gitignore`） |
+| `agents/llm/llm-env-example.yaml` / `agents/mcp/mcp-env-example.yaml` | ✅ | 仅占位 |
+| `agents/llm/llm.yaml` / `agents/mcp/mcp.yaml` | ❌ | 含真实密钥（已在 `.gitignore`） |
 | `*.template.json` / `*.template.toml` | ✅ | 仅 `${KEY}` 占位符 |
 | `agents/mcp/mcp.json` | ❌ | 由 `agentctl generate` 生成 |
 | `ide/codex/auth.json` | ❌ | 由 `agentctl generate` 生成 |

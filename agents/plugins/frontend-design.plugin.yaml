@@ -2,7 +2,30 @@ name: frontend-design
 version: 1.0.0
 description: 前端设计插件 - 提供 UI/UX 设计和前端开发能力
 author: MyAgentPlugin
-mcpServers: {}
+mcpServers:
+  mastergo:
+    command: npx
+    args:
+      - -y
+      - '@mastergo/vibe-mcp'
+      - '--url=http://localhost:50678'
+    disabled: true
+  mastergo-magic-mcp:
+    command: npx
+    args:
+      - -y
+      - '@mastergo/magic-mcp'
+      - '--token='
+      - '--url=https://mastergo.com'
+    env:
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+    disabled: true
+  stitch:
+    type: http
+    url: https://stitch.googleapis.com/mcp
+    headers:
+      X-Goog-Api-Key: ''
+    disabled: true
 skills:
   - { name: stitch-prototype-skill, description: Stitch 原型生成 }
   - { name: design-taste-frontend, description: 前端设计品味提升 }

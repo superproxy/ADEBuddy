@@ -29,7 +29,16 @@ class CodexTarget(IdeTarget):
         # Codex TOML 模板：source_dir 是项目根（source_rules.parent.parent = agents/ 的父目录）
         source_dir = self.root
         codex_template = source_dir / "ide" / "codex" / "config.toml"
+
+        # 项目级 .codex/config.toml：用项目模板作为 base（含 model_provider 等）
         convert_to_codex_mcp(source_mcp_file, codex_dir / "config.toml",
+                             self.force, codex_template)
+
+        # 全局 ~/.codex/config.toml：target 自身作为 base（保留用户全局的 model/auth 配置），
+        # 仅在 target 不存在时回退到项目模板
+        global_codex_dir = Path.home() / ".codex"
+        global_codex_dir.mkdir(parents=True, exist_ok=True)
+        convert_to_codex_mcp(source_mcp_file, global_codex_dir / "config.toml",
                              self.force, codex_template)
 
         # 复制 auth.json

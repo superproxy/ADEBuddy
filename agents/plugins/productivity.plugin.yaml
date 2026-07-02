@@ -2,7 +2,35 @@ name: productivity
 version: 1.0.0
 description: 生产力插件 - 提供需求分析、任务规划、项目管理能力
 author: MyAgentPlugin
-mcpServers: {}
+mcpServers:
+  yuque-mcp:
+    command: npx
+    args:
+      - -y
+      - yuque-mcp
+      - start
+      - '--token='
+      - '--client=vscode'
+    env:
+      YUQUE_TOKEN: ''
+    disabled: true
+  tavily-mcp:
+    command: npx
+    args:
+      - -y
+      - tavily-mcp@latest
+    env:
+      TAVILY_API_KEY: ''
+      DEFAULT_PARAMETERS: '{"include_images": true, "max_results": 15, "search_depth": "advanced"}'
+    disabled: true
+  amap-maps-mcp:
+    command: npx
+    args:
+      - -y
+      - '@amap/amap-maps-mcp-server'
+    env:
+      AMAP_MAPS_API_KEY: ''
+    disabled: false
 skills:
   - { name: usecase-prd-skill, description: 用例驱动的 PRD 编写 }
   - { name: task-plan-skill, description: 任务拆解与排期 }

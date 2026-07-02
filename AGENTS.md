@@ -49,12 +49,15 @@ agents/
 ### 1.5.2 三层配置分离
 
 ```
-模板（提交，无密钥）   →  本地密钥（不提交）   →  运行态产物（不提交，由脚本生成）
-*.template.json/toml      llm.yaml + mcp.yaml      mcp.json / auth.json / config.toml / opencode.json
+模板（提交，无密钥）              →  本地密钥（不提交）              →  运行态产物（不提交，由脚本生成）
+*.template.json/toml                 agents/llm/llm.yaml               agents/mcp/mcp.json
+*-env-example.yaml                   agents/mcp/mcp.yaml               ide/codex/auth.json
+                                     agents/skills/skill.yaml          ide/codex/config.toml
+                                                                       opencode.json
 ```
 
 - **模板层**：列出占位符 `${KEY}`，可以安全提交，作为"团队共识结构"。
-- **密钥层**：`llm.yaml` + `mcp.yaml` 由开发者本地填写，**绝不提交**。
+- **密钥层**：`agents/llm/llm.yaml` + `agents/mcp/mcp.yaml` + `agents/skills/skill.yaml` 由开发者本地填写，**绝不提交**。
 - **运行态产物**：由 `agentctl generate`（见 [scripts/agentctl.py](scripts/agentctl.py)）在本地组合两者后生成；**绝不提交**。
 
 这样模板可以演化（新增 provider / MCP 服务）而不需要每次改密钥；密钥可以轮换而不影响共享结构。

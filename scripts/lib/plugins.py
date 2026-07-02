@@ -28,6 +28,50 @@ from lib.skills import install_skill
 
 
 # ============================================================
+# 已安装插件清单（.agents/installed-plugins.yaml）
+# ============================================================
+
+def _installed_list_path(project_root: Path) -> Path:
+    return project_root / ".agents" / "installed-plugins.yaml"
+
+
+def read_installed_plugins(project_root: Path) -> list:
+    """读取已安装插件名清单。"""
+    path = _installed_list_path(project_root)
+    if not path.exists():
+        return []
+    try:
+        data = load_env_config_file(path)
+        if isinstance(data, list):
+            return [str(x) for x in data]
+        if isinstance(data, dict) and "plugins" in data:
+            return [str(x) for x in data["plugins"]]
+    except Exception:
+        pass
+    return []
+
+
+def _write_installed_plugins(project_root: Path, names: list) -> None:
+    path = _installed_list_path(project_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    save_env_config_file(path, sorted(set(names)))
+
+
+def add_to_installed(project_root: Path, plugin_name: str) -> None:
+    names = read_installed_plugins(project_root)
+    if plugin_name not in names:
+        names.append(plugin_name)
+        _write_installed_plugins(project_root, names)
+
+
+def remove_from_installed(project_root: Path, plugin_name: str) -> None:
+    names = read_installed_plugins(project_root)
+    if plugin_name in names:
+        names.remove(plugin_name)
+        _write_installed_plugins(project_root, names)
+
+
+# ============================================================
 # 插件配置解析
 # ============================================================
 
@@ -178,13 +222,15 @@ def install_plugin(
     print(f"\n{COLOR_MAGENTA}步骤 3/3: 合并环境变量到 llm.yaml{COLOR_RESET}")
     update_env_file(env_path, plugin_config)
 
+    # 记录到已安装清单
+    add_to_installed(source_dir, plugin_config.get('name', ''))
+
     print(f"\n{COLOR_GREEN}{'=' * 40}{COLOR_RESET}")
     print(f"{COLOR_GREEN}  插件安装完成！{COLOR_RESET}")
     print(f"{COLOR_GREEN}{'=' * 40}{COLOR_RESET}")
     print(f"\n{COLOR_YELLOW}下一步: {COLOR_RESET}")
     print(f"  {COLOR_WHITE}1. agentctl generate  # 合并 mcp.yaml + plugin mcp → mcp.json{COLOR_RESET}")
     print(f"  {COLOR_WHITE}2. agentctl sync      # 同步 mcp + skills 到各 IDE{COLOR_RESET}")
-    print(f"  {COLOR_WHITE}（或直接）agentctl setup  # 一键执行 plugin install all + generate + sync{COLOR_RESET}")
 
 
 def list_plugins(plugins_dir: Path) -> None:
@@ -213,13 +259,116 @@ def list_plugins(plugins_dir: Path) -> None:
         print(f"{COLOR_YELLOW}[!] 没有找到有效的插件{COLOR_RESET}")
         return
 
+    # 从已安装清单读取状态
+    project_root = plugins_dir.parent.parent
+    installed_names = read_installed_plugins(project_root)
+
     print(f"\n找到 {len(plugin_files)} 个插件:\n")
     for i, (file, config) in enumerate(plugin_files, 1):
-        print(f"{COLOR_WHITE}{i}. {config.get('name', file.stem)}{COLOR_RESET}")
+        name = config.get('name', file.stem)
+        is_default = config.get('default', False)
+        installed = name in installed_names
+
+        status = f"{COLOR_GREEN}[已安装]{COLOR_RESET}" if installed else f"{COLOR_DARKGRAY}[未安装]{COLOR_RESET}"
+        default_tag = f"{COLOR_MAGENTA}[默认]{COLOR_RESET}" if is_default else ""
+        print(f"{COLOR_WHITE}{i}. {name}{COLOR_RESET} {status} {default_tag}")
         print(f"   {COLOR_DARKGRAY}版本: {config.get('version', 'unknown')}{COLOR_RESET}")
         print(f"   {COLOR_DARKGRAY}描述: {config.get('description', '')}{COLOR_RESET}")
         print(f"   {COLOR_DARKGRAY}文件: {file}{COLOR_RESET}")
         print()
+
+
+def uninstall_plugin(
+    plugin_path: Path,
+    env_path: Path,
+    project_root: Path,
+    remove_plugin_file: bool = False,
+) -> None:
+    """卸载插件
+
+    工作流程（install 的逆操作）：
+      1. 读取 plugin.yaml 获取 skills 列表和 envVars
+      2. 删除 .agents/skills/ 下该插件安装的 skill
+      3. 从 llm.yaml 移除该插件的 envVars
+      4. （可选）删除 plugin.yaml 文件本身
+
+    注意：mcp.json 不需要手动清理，下次 `agentctl generate` 会从剩余的
+    plugins/*.plugin.yaml 重新合并。卸载后建议执行 generate + sync。
+    """
+    import shutil
+
+    print(f"{COLOR_CYAN}{'=' * 40}{COLOR_RESET}")
+    print(f"{COLOR_CYAN}  插件卸载{COLOR_RESET}")
+    print(f"{COLOR_CYAN}{'=' * 40}{COLOR_RESET}")
+
+    if not plugin_path.exists():
+        print(f"{COLOR_RED}[!] 插件文件不存在: {plugin_path}{COLOR_RESET}", file=sys.stderr)
+        sys.exit(1)
+
+    plugin_config = load_plugin_config(plugin_path)
+    if not validate_plugin_config(plugin_config):
+        sys.exit(1)
+
+    name = plugin_config.get('name', plugin_path.stem)
+    print(f"\n{COLOR_WHITE}插件名称: {name}{COLOR_RESET}")
+    print(f"{COLOR_WHITE}版本: {plugin_config.get('version', '')}{COLOR_RESET}")
+
+    # Step 1: 删除 .agents/skills/ 下该插件的 skill
+    print(f"\n{COLOR_MAGENTA}步骤 1/3: 删除已安装的 skill{COLOR_RESET}")
+    agents_skills_dir = project_root / ".agents" / "skills"
+    skills_list = plugin_config.get('skills', []) or []
+    removed_skills = 0
+    for skill in skills_list:
+        skill_name = skill.get('name') if isinstance(skill, dict) else str(skill)
+        if not skill_name:
+            continue
+        skill_dir = agents_skills_dir / skill_name
+        if skill_dir.exists():
+            shutil.rmtree(str(skill_dir), ignore_errors=True)
+            print(f"  {COLOR_GREEN}[OK] 删除 skill: {skill_name}{COLOR_RESET}")
+            removed_skills += 1
+        else:
+            print(f"  {COLOR_DARKGRAY}[~] skill 不存在，跳过: {skill_name}{COLOR_RESET}")
+    if removed_skills == 0:
+        print(f"  {COLOR_DARKGRAY}[~] 无已安装的 skill 需要删除{COLOR_RESET}")
+
+    # Step 2: 从 llm.yaml 移除 envVars
+    print(f"\n{COLOR_MAGENTA}步骤 2/3: 从 llm.yaml 移除环境变量{COLOR_RESET}")
+    env_vars = plugin_config.get('envVars', {}) or {}
+    if env_vars and env_path.exists():
+        env_config = load_env_config_file(env_path)
+        if not isinstance(env_config, dict):
+            env_config = {}
+        removed_envs = 0
+        for var_name in env_vars.keys():
+            if var_name in env_config:
+                del env_config[var_name]
+                print(f"  {COLOR_GREEN}[OK] 移除环境变量: {var_name}{COLOR_RESET}")
+                removed_envs += 1
+        if removed_envs > 0:
+            save_env_config_file(env_path, env_config)
+            print(f"  {COLOR_GREEN}[OK] llm.yaml 已更新{COLOR_RESET}")
+        else:
+            print(f"  {COLOR_DARKGRAY}[~] 无需移除的环境变量{COLOR_RESET}")
+    else:
+        print(f"  {COLOR_DARKGRAY}[~] 插件无 envVars 或 llm.yaml 不存在{COLOR_RESET}")
+
+    # Step 3: 可选删除 plugin.yaml + 从已安装清单移除
+    print(f"\n{COLOR_MAGENTA}步骤 3/3: 清理插件配置文件{COLOR_RESET}")
+    remove_from_installed(project_root, name)
+    print(f"  {COLOR_GREEN}[OK] 从已安装清单移除: {name}{COLOR_RESET}")
+    if remove_plugin_file:
+        plugin_path.unlink()
+        print(f"  {COLOR_GREEN}[OK] 已删除插件文件: {plugin_path.name}{COLOR_RESET}")
+    else:
+        print(f"  {COLOR_DARKGRAY}[~] 保留插件文件: {plugin_path.name}（可重新安装）{COLOR_RESET}")
+
+    print(f"\n{COLOR_GREEN}{'=' * 40}{COLOR_RESET}")
+    print(f"{COLOR_GREEN}  插件卸载完成！{COLOR_RESET}")
+    print(f"{COLOR_GREEN}{'=' * 40}{COLOR_RESET}")
+    print(f"\n{COLOR_YELLOW}下一步: {COLOR_RESET}")
+    print(f"  {COLOR_WHITE}1. agentctl generate  # 重新生成 mcp.json（移除该插件的 mcpServers）{COLOR_RESET}")
+    print(f"  {COLOR_WHITE}2. agentctl sync      # 同步到各 IDE（skill 会在 --force 时被覆盖，但不会自动删除）{COLOR_RESET}")
 
 
 # ============================================================

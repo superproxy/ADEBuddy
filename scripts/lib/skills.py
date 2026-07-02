@@ -16,6 +16,7 @@ from pathlib import Path
 from lib.logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY, COLOR_MAGENTA, COLOR_RESET,
 )
+from lib.config_io import load_env_config_file, save_env_config_file
 
 H1 = "## "
 H2 = "### "
@@ -23,43 +24,129 @@ H3 = "#### "
 
 
 # ============================================================
+# skill.yaml 读写（启用清单管理）
+# ============================================================
+
+def load_skill_yaml(skill_yaml_path: Path) -> dict:
+    """读取 skill.yaml，返回 {enabled: [name, ...]}。"""
+    if not skill_yaml_path.exists():
+        return {"enabled": []}
+    try:
+        data = load_env_config_file(skill_yaml_path)
+        if not isinstance(data, dict):
+            return {"enabled": []}
+        if "enabled" not in data:
+            data["enabled"] = []
+        return data
+    except Exception:
+        return {"enabled": []}
+
+
+def save_skill_yaml(skill_yaml_path: Path, data: dict) -> None:
+    """保存 skill.yaml。"""
+    save_env_config_file(skill_yaml_path, data)
+
+
+def get_enabled_skills(skill_yaml_path: Path) -> set:
+    """获取启用的技能名集合。"""
+    data = load_skill_yaml(skill_yaml_path)
+    return set(data.get("enabled", []))
+
+
+def enable_skill(skill_yaml_path: Path, skill_name: str) -> bool:
+    """启用技能，返回是否新增。"""
+    data = load_skill_yaml(skill_yaml_path)
+    enabled = data.get("enabled", [])
+    if skill_name in enabled:
+        return False
+    enabled.append(skill_name)
+    data["enabled"] = enabled
+    save_skill_yaml(skill_yaml_path, data)
+    return True
+
+
+def disable_skill(skill_yaml_path: Path, skill_name: str) -> bool:
+    """禁用技能，返回是否移除。"""
+    data = load_skill_yaml(skill_yaml_path)
+    enabled = data.get("enabled", [])
+    if skill_name not in enabled:
+        return False
+    enabled.remove(skill_name)
+    data["enabled"] = enabled
+    save_skill_yaml(skill_yaml_path, data)
+    return True
+
+
+def scan_local_skills(project_root: Path) -> list:
+    """扫描本地所有技能（agents/skills/ + .agents/skills/），返回去重的技能名列表。"""
+    seen = set()
+    for d in (project_root / "agents" / "skills", project_root / ".agents" / "skills"):
+        if not d.exists():
+            continue
+        for skill_dir in sorted(d.iterdir()):
+            if skill_dir.is_dir() and skill_dir.name not in seen:
+                seen.add(skill_dir.name)
+    return sorted(seen)
+
+
+# ============================================================
 # Skill 同步（含白名单过滤）
 # ============================================================
 
-def copy_skills_safe(src: Path, dst: Path, label: str, force: bool,
+def _normalize_skill_sources(src) -> list:
+    """归一化 skill 源：接受 Path 或 list[Path]，返回存在的 Path 列表。"""
+    if isinstance(src, list):
+        return [s for s in src if s.exists()]
+    if isinstance(src, Path) and src.exists():
+        return [src]
+    return []
+
+
+def copy_skills_safe(src, dst: Path, label: str, force: bool,
                      include_skills=None) -> None:
     """复制技能目录到 IDE skills 目录。
 
     Args:
+        src: 源目录，支持 Path 或 list[Path]（多源时前者优先，后者补充同名以外的 skill）。
         include_skills: 白名单集合，仅复制名称在此集合内的技能；
                         None 表示复制全部。
     """
-    if not src.exists():
-        print(f"{COLOR_YELLOW}[!] Skills source dir not found: {src}{COLOR_RESET}")
+    srcs = _normalize_skill_sources(src)
+    if not srcs:
+        if isinstance(src, list):
+            print(f"{COLOR_YELLOW}[!] No skills source dirs found: {src}{COLOR_RESET}")
+        else:
+            print(f"{COLOR_YELLOW}[!] Skills source dir not found: {src}{COLOR_RESET}")
         return
 
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     copied = 0
     skipped = 0
-    for skill_dir in sorted(src.iterdir()):
-        if not skill_dir.is_dir():
-            continue
-        # 按白名单过滤
-        if include_skills is not None and skill_dir.name not in include_skills:
-            continue
-        skill_dst = dst / skill_dir.name
-        if skill_dst.exists():
-            if force:
-                shutil.rmtree(str(skill_dst), ignore_errors=True)
-            else:
-                skipped += 1
+    seen = set()  # 已处理的 skill 名（前源优先，后源跳过同名）
+
+    for src_dir in srcs:
+        for skill_dir in sorted(src_dir.iterdir()):
+            if not skill_dir.is_dir():
                 continue
-        try:
-            shutil.copytree(str(skill_dir), str(skill_dst), ignore=shutil.ignore_patterns('.git'))
-            copied += 1
-        except Exception as e:
-            print(f"{COLOR_RED}[!] Failed to copy skill {skill_dir.name}: {e}{COLOR_RESET}")
+            if skill_dir.name in seen:
+                continue  # 前一个源已处理，跳过同名
+            seen.add(skill_dir.name)
+            # 按白名单过滤
+            if include_skills is not None and skill_dir.name not in include_skills:
+                continue
+            skill_dst = dst / skill_dir.name
+            if skill_dst.exists():
+                if force:
+                    shutil.rmtree(str(skill_dst), ignore_errors=True)
+                else:
+                    skipped += 1
+                    continue
+            try:
+                shutil.copytree(str(skill_dir), str(skill_dst), ignore=shutil.ignore_patterns('.git'))
+                copied += 1
+            except Exception as e:
+                print(f"{COLOR_RED}[!] Failed to copy skill {skill_dir.name}: {e}{COLOR_RESET}")
 
     if copied > 0:
         print(f"{COLOR_GREEN}[OK] {label}: {copied} skills copied{COLOR_RESET}")
@@ -129,11 +216,16 @@ def write_skills_index(skills_source_dir: Path, target_file: Path, ide_name: str
     """生成技能索引 README.md。
 
     Args:
+        skills_source_dir: 源目录，支持 Path 或 list[Path]（多源合并索引，前者优先）。
         include_skills: 白名单集合，仅索引名称在此集合内的技能；
                         None 表示索引全部。
     """
-    if not skills_source_dir.exists():
-        print(f"{COLOR_YELLOW}[!] Skills source dir not found: {skills_source_dir}{COLOR_RESET}")
+    srcs = _normalize_skill_sources(skills_source_dir)
+    if not srcs:
+        if isinstance(skills_source_dir, list):
+            print(f"{COLOR_YELLOW}[!] No skills source dirs found: {skills_source_dir}{COLOR_RESET}")
+        else:
+            print(f"{COLOR_YELLOW}[!] Skills source dir not found: {skills_source_dir}{COLOR_RESET}")
         return
 
     if target_file.exists() and not force:
@@ -163,44 +255,50 @@ def write_skills_index(skills_source_dir: Path, target_file: Path, ide_name: str
     lines.append(f"{H2}Skill List")
     lines.append("")
 
-    for skill_dir in sorted(skills_source_dir.iterdir()):
-        if not skill_dir.is_dir():
-            continue
-        # 按白名单过滤
-        if include_skills is not None and skill_dir.name not in include_skills:
-            continue
-        skill_file = skill_dir / "SKILL.md"
-        if not skill_file.exists():
-            continue
+    seen = set()  # 前源优先，后源跳过同名
+    for src_dir in srcs:
+        for skill_dir in sorted(src_dir.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            if skill_dir.name in seen:
+                continue
+            seen.add(skill_dir.name)
+            # 按白名单过滤
+            if include_skills is not None and skill_dir.name not in include_skills:
+                continue
+            skill_file = skill_dir / "SKILL.md"
+            if not skill_file.exists():
+                continue
 
-        skill_content = skill_file.read_text(encoding="utf-8")
-        name = skill_dir.name
-        description = ""
+            skill_content = skill_file.read_text(encoding="utf-8")
+            name = skill_dir.name
+            description = ""
 
-        desc_match = re.search(r'description:\s*>-?\s*\n?\s*(.+?)(\n\w+:|$)', skill_content)
-        if not desc_match:
-            desc_match = re.search(r'description:\s*"(.+?)"', skill_content)
-        if not desc_match:
-            desc_match = re.search(r'description:\s*(.+?)(\n\w+:|$)', skill_content)
-        if desc_match:
-            description = desc_match.group(1).strip()
-            description = re.sub(r'>\s*', ' ', description)
-            description = re.sub(r'\s+', ' ', description).strip()
+            desc_match = re.search(r'description:\s*>-?\s*\n?\s*(.+?)(\n\w+:|$)', skill_content)
+            if not desc_match:
+                desc_match = re.search(r'description:\s*"(.+?)"', skill_content)
+            if not desc_match:
+                desc_match = re.search(r'description:\s*(.+?)(\n\w+:|$)', skill_content)
+            if desc_match:
+                description = desc_match.group(1).strip()
+                description = re.sub(r'>\s*', ' ', description)
+                description = re.sub(r'\s+', ' ', description).strip()
 
-        try:
-            relative_path = skill_file.resolve().relative_to(Path.cwd())
-        except ValueError:
-            relative_path = skill_file
+            try:
+                relative_path = skill_file.resolve().relative_to(Path.cwd())
+            except ValueError:
+                relative_path = skill_file
 
-        lines.append(f"{H3}{name}")
-        lines.append("")
-        lines.append(f"- **Description**: {description}")
-        lines.append(f"- **Path**: {relative_path}")
-        lines.append("")
+            lines.append(f"{H3}{name}")
+            lines.append("")
+            lines.append(f"- **Description**: {description}")
+            lines.append(f"- **Path**: {relative_path}")
+            lines.append("")
 
     lines.append(f"{H2}Skill to Role Mapping")
     lines.append("")
-    csv_path = skills_source_dir.parent.parent / "skills-index.csv"
+    # CSV 在 agents/skills/ 目录内
+    csv_path = srcs[0] / "skills-index.csv"
     mapping = load_skill_mapping(csv_path)
     if mapping:
         lines.extend(build_role_mapping_table(mapping))

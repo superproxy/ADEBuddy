@@ -94,11 +94,11 @@ app = Flask(__name__, static_folder=None)
 ENV_EXAMPLE = PROJECT_ROOT / "env.example.yaml"
 ENV_FILE = PROJECT_ROOT / "env.yaml"
 # 新拆分：env.yaml → llm.yaml + mcp.yaml
-LLM_FILE = PROJECT_ROOT / "llm.yaml"
-MCP_CONFIG_FILE = PROJECT_ROOT / "mcp.yaml"
+LLM_FILE = PROJECT_ROOT / "agents" / "llm" / "llm.yaml"
+MCP_CONFIG_FILE = PROJECT_ROOT / "agents" / "mcp" / "mcp.yaml"
 # 拆分后的示例模板（可安全提交）
-LLM_EXAMPLE = PROJECT_ROOT / "llm-env-example.yaml"
-MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "mcp-env-example.yaml"
+LLM_EXAMPLE = PROJECT_ROOT / "agents" / "llm" / "llm-env-example.yaml"
+MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "agents" / "mcp" / "mcp-env-example.yaml"
 MCP_TEMPLATE = PROJECT_ROOT / "agents" / "mcp" / "mcp.template.json"
 PLUGINS_DIR = PROJECT_ROOT / "agents" / "plugins"
 SKILLS_CSV = PROJECT_ROOT / "agents" / "skills" / "skills-index.csv"
