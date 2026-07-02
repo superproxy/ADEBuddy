@@ -83,7 +83,7 @@ def _load_script_module(module_name: str, file_path: Path):
 # 从 lib/ 公共库导入（替代旧脚本的 importlib 加载）
 sys.path.insert(0, str(SCRIPTS_DIR))
 from lib.config_io import load_env_config_file, save_env_config_file
-from lib.skills import build_install_command, parse_shorthand
+from lib.skills import build_install_command, parse_shorthand, enable_skill, disable_skill, get_enabled_skills
 from lib.plugins import install_plugin, update_env_file, add_to_installed
 
 app = Flask(__name__, static_folder=None)
@@ -102,6 +102,7 @@ MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "agents" / "mcp" / "mcp-env-example.yaml"
 MCP_TEMPLATE = PROJECT_ROOT / "agents" / "mcp" / "mcp.template.json"
 PLUGINS_DIR = PROJECT_ROOT / "agents" / "plugins"
 SKILLS_CSV = PROJECT_ROOT / "agents" / "skills" / "skills-index.csv"
+SKILL_YAML = PROJECT_ROOT / "agents" / "skills" / "skill.yaml"
 AGENTS_SKILLS_CACHE = PROJECT_ROOT / "agents" / "skills"
 DOT_AGENTS_SKILLS = PROJECT_ROOT / ".agents" / "skills"
 
@@ -425,6 +426,7 @@ def list_local_skills():
 
 @app.route("/api/skills/installed", methods=["GET"])
 def list_installed_skills():
+    enabled_set = get_enabled_skills(SKILL_YAML)
     installed = []
     if DOT_AGENTS_SKILLS.exists():
         for d in DOT_AGENTS_SKILLS.iterdir():
@@ -433,8 +435,59 @@ def list_installed_skills():
                     "name": d.name,
                     "path": str(d.relative_to(PROJECT_ROOT)),
                     "skill_md_exists": True,
+                    "enabled": d.name in enabled_set,
                 })
     return jsonify({"ok": True, "data": installed})
+
+
+@app.route("/api/skills/<name>/toggle", methods=["POST"])
+def toggle_skill_enabled(name):
+    """切换技能启用状态：启用/禁用并自动同步到选定 IDE。
+    Body: { enabled: true|false, ides: ["Codex", "Claude"] }
+    """
+    body = request.get_json(silent=True) or {}
+    enabled = bool(body.get("enabled", True))
+    ides = body.get("ides") or []
+    if not isinstance(ides, list):
+        ides = []
+    # 安全校验 IDE 名
+    allowed_ides = {"Agents", "Claude", "Codex", "Cursor", "IDEA", "OpenClaw",
+                    "OpenCode", "Qoder", "Trae", "TraeCN", "TraeSoloCN", "WorkBuddy", "All"}
+    safe_ides = [i for i in ides if i in allowed_ides]
+
+    try:
+        if enabled:
+            enable_skill(SKILL_YAML, name)
+        else:
+            disable_skill(SKILL_YAML, name)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    # 自动同步到选定 IDE（scope=skill）
+    sync_logs = []
+    if safe_ides:
+        ide_arg = "All" if "All" in safe_ides else ",".join(safe_ides)
+        try:
+            cmd = _script_run_cmd("agentctl", ["sync", "--ide", ide_arg, "--force", "--scope", "skill"])
+            result = subprocess.run(
+                cmd, cwd=str(PROJECT_ROOT),
+                capture_output=True, text=True,
+                encoding="utf-8", errors="ignore",
+                timeout=120,
+            )
+            sync_logs.append(result.stdout or "")
+            if result.returncode != 0:
+                sync_logs.append("[WARN] " + (result.stderr or ""))
+        except Exception as e:
+            sync_logs.append(f"[ERROR] sync 失败: {e}")
+
+    return jsonify({
+        "ok": True,
+        "name": name,
+        "enabled": enabled,
+        "synced_ides": safe_ides,
+        "sync_log": "\n".join(sync_logs).strip(),
+    })
 
 
 @app.route("/api/skills/search", methods=["GET"])

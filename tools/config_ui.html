@@ -63,8 +63,8 @@
         {{ t.label }}
       </button>
     </nav>
-    <!-- 全局同步工具条（共享：自动同步 + IDE 多选 + 同步按钮） -->
-    <div class="bg-white/10 border-t border-white/10">
+    <!-- 全局同步工具条（共享：自动同步 + IDE 多选 + 同步按钮；插件构建 tab 隐藏） -->
+    <div v-show="tab !== 'plugin-build'" class="bg-white/10 border-t border-white/10">
       <div class="max-w-[1600px] mx-auto px-6 py-1.5 flex items-center gap-3 text-xs flex-wrap">
         <label class="flex items-center gap-1 cursor-pointer select-none text-white/90">
           <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
@@ -514,20 +514,17 @@
       </div>
       <div class="bg-white rounded-xl shadow-card p-5">
         <div class="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold">本地可用技能 ({{ installedSkills.length }} · 选中 {{ selectedInstalledCount }})</h2>
+          <h2 class="text-sm font-semibold">本地可用技能 ({{ installedSkills.length }} · 已启用 {{ enabledInstalledCount }})</h2>
           <div class="flex gap-2">
             <button @click="toggleAllInstalled(true)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全选</button>
             <button @click="toggleAllInstalled(false)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全不选</button>
-            <button @click="syncInstalledToIde" :disabled="syncing" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50">
-              {{ syncing ? '同步中...' : '同步到 IDE' }}
-            </button>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-2">
-          <div v-for="s in installedSkills" :key="s.name" :class="['border rounded-md p-2.5 transition', selectedInstalledSkills[s.name] ? 'border-brand-400 bg-brand-50/30' : 'border-ink-300']">
+          <div v-for="s in installedSkills" :key="s.name" :class="['border rounded-md p-2.5 transition', s.enabled ? 'border-brand-400 bg-brand-50/30' : 'border-ink-300']">
             <div class="flex justify-between items-center">
               <div class="flex items-center gap-2">
-                <input type="checkbox" v-model="selectedInstalledSkills[s.name]" class="w-4 h-4 accent-brand-500 cursor-pointer">
+                <input type="checkbox" :checked="s.enabled" @change="onToggleSkill(s, $event.target.checked)" class="w-4 h-4 accent-brand-500 cursor-pointer">
                 <div class="font-medium text-sm">{{ s.name }}</div>
               </div>
               <div class="flex gap-1">
@@ -618,7 +615,7 @@ createApp({
     const skillSearched = ref(false);
     const manualSkillInput = ref('');
     const installedSkills = ref([]);
-    const selectedInstalledSkills = reactive({});  // 已安装技能勾选状态，key=技能名
+    const _togglingSkills = new Set();  // 防止并发切换
 
     const ideList = [
       { key: 'Agents', label: 'Agents', desc: '通用 agents 配置' },
@@ -1090,20 +1087,50 @@ createApp({
     }
     async function syncToIde() { await syncIde('All'); }
 
-    // ===== 已安装技能勾选 =====
-    const selectedInstalledCount = computed(() => installedSkills.value.filter(s => selectedInstalledSkills[s.name]).length);
-    function getSelectedInstalledSkills() { return installedSkills.value.filter(s => selectedInstalledSkills[s.name]).map(s => s.name); }
-    function toggleAllInstalled(checked) {
-      installedSkills.value.forEach(s => { selectedInstalledSkills[s.name] = checked; });
-    }
-    // 已安装区"同步到 IDE"按钮：按勾选的技能同步
-    async function syncInstalledToIde() {
-      if (syncing.value) { toast('正在同步中，请稍候', 'warn'); return; }
-      const sel = getSelectedInstalledSkills();
-      if (!sel.length) { toast('请先勾选要同步的技能', 'warn'); return; }
-      for (const ide of syncTargetIdes.value) {
-        await runSync(ide, ['skill'], sel);
+    // ===== 已安装技能启用/禁用 =====
+    const enabledInstalledCount = computed(() => installedSkills.value.filter(s => s.enabled).length);
+    // 单个技能切换：变更即同步到选定 IDE
+    async function onToggleSkill(s, enabled) {
+      if (_togglingSkills.has(s.name)) return;
+      _togglingSkills.add(s.name);
+      s.enabled = enabled;  // 乐观更新
+      try {
+        const r = await api('/api/skills/' + encodeURIComponent(s.name) + '/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled, ides: syncTargetIdes.value }),
+        });
+        if (r.ok) {
+          toast(enabled ? `已启用 ${s.name} 并同步` : `已禁用 ${s.name}`);
+        } else {
+          s.enabled = !enabled;  // 回滚
+          toast('切换失败: ' + (r.error || '未知错误'), 'err');
+        }
+      } catch (e) {
+        s.enabled = !enabled;
+        toast('切换失败: ' + e.message, 'err');
+      } finally {
+        _togglingSkills.delete(s.name);
       }
+    }
+    // 全选/全不选：批量切换启用状态
+    async function toggleAllInstalled(enabled) {
+      const targets = installedSkills.value.filter(s => s.enabled !== enabled);
+      if (!targets.length) return;
+      if (!confirm(enabled ? `启用全部 ${targets.length} 个技能并同步?` : `禁用全部 ${targets.length} 个技能并同步?`)) return;
+      // 乐观更新
+      targets.forEach(s => s.enabled = enabled);
+      // 批量调用（逐个，避免后端冲突）
+      for (const s of targets) {
+        try {
+          await api('/api/skills/' + encodeURIComponent(s.name) + '/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled, ides: syncTargetIdes.value }),
+          });
+        } catch (e) { /* 忽略单个失败，继续 */ }
+      }
+      toast(`已${enabled ? '启用' : '禁用'} ${targets.length} 个技能`);
     }
 
     // ===== IDE =====
@@ -1114,11 +1141,11 @@ createApp({
       await runSync(ide, scopes);
     }
     // 单 scope 同步：用于各配置 tab 顶部的"同步到 IDE"按钮
-    // skill scope 时附带已勾选的技能名，实现按需同步
+    // skill scope 时同步所有已启用的技能
     async function syncScopeToIde(scope) {
       if (syncing.value) { toast('正在同步中，请稍候', 'warn'); return; }
-      const skills = scope === 'skill' ? getSelectedInstalledSkills() : null;
-      if (scope === 'skill' && skills && !skills.length) { toast('请先勾选要同步的技能', 'warn'); return; }
+      const skills = scope === 'skill' ? installedSkills.value.filter(s => s.enabled).map(s => s.name) : null;
+      if (scope === 'skill' && skills && !skills.length) { toast('请先启用至少一个技能', 'warn'); return; }
       // 同步前自动保存对应配置（静默）
       if (scope === 'llm') await saveEnv(true);
       if (scope === 'mcp') await saveMcpAll(true);
@@ -1223,7 +1250,7 @@ createApp({
       plugins, selectedPluginFile, pluginForm,
       mcpTab, mcpMarketQ, mcpMarketResults, mcpSearched, mcpForm, editingMcp, editMcpForm,
       skillTab, skillSources, skillSearchQ, skillSearchResults, skillSearchHint, skillSearched,
-      manualSkillInput, installedSkills, selectedInstalledSkills, selectedInstalledCount,
+      manualSkillInput, installedSkills, enabledInstalledCount, onToggleSkill,
       ideList, ideLog, ideLogEl, syncScopes, syncTargetIdes, syncing, autoSync, syncCurrentScope,
       logVisible, logText, logEl, modalVisible, modalTitle, modalContent, toasts,
       toggleProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
