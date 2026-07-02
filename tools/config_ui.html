@@ -63,6 +63,24 @@
         {{ t.label }}
       </button>
     </nav>
+    <!-- 全局同步工具条（共享：自动同步 + IDE 多选 + 同步按钮） -->
+    <div class="bg-white/10 border-t border-white/10">
+      <div class="max-w-[1600px] mx-auto px-6 py-1.5 flex items-center gap-3 text-xs flex-wrap">
+        <label class="flex items-center gap-1 cursor-pointer select-none text-white/90">
+          <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
+        </label>
+        <span class="text-white/60">|</span>
+        <span class="text-white/80">同步到:</span>
+        <label v-for="ide in ideList" :key="ide.key" class="flex items-center gap-1 cursor-pointer select-none text-white/80 hover:text-white">
+          <input type="checkbox" :value="ide.key" v-model="syncTargetIdes" class="w-3 h-3"> {{ ide.label }}
+        </label>
+        <span class="text-white/40 text-[10px]">({{ syncTargetIdes.length }} 选中)</span>
+        <button @click="syncCurrentScope" :disabled="syncing || !syncTargetIdes.length"
+                class="ml-auto px-3 py-1 bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-40 font-medium">
+          {{ syncing ? '同步中...' : '同步到 IDE' }}
+        </button>
+      </div>
+    </div>
   </header>
 
   <main class="max-w-[1600px] mx-auto px-6 py-5">
@@ -76,19 +94,7 @@
             <span class="text-[10px] text-ink-500 font-normal">llm.yaml</span>
           </h2>
           <div class="flex gap-2 items-center">
-            <label class="flex items-center gap-1 text-[10px] text-ink-600 cursor-pointer select-none">
-              <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
-            </label>
-            <span class="text-[10px] text-brand-600">同步到</span>
-            <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
-              <option value="All">全部 IDE</option>
-              <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
-            </select>
-            <button @click="syncScopeToIde('llm')" :disabled="syncing" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50 font-medium">
-              {{ syncing ? '同步中...' : '同步到 IDE' }}
-            </button>
             <button @click="addProvider" class="px-3 py-1.5 text-xs bg-brand-50 text-brand-600 rounded-md hover:bg-brand-100 font-medium">+ 添加 Provider</button>
-            <button @click="saveEnv()" class="px-3 py-1.5 text-xs bg-ink-700 text-white rounded-md hover:bg-ink-900 font-medium">保存 llm.yaml</button>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3 mb-4">
@@ -405,20 +411,8 @@
             <span class="text-[10px] text-ink-500 font-normal">{{ Object.keys(mcpTemplate.mcpServers || {}).length }} 个 · 启用 {{ mcpEnabledCount }} · 密钥 {{ Object.keys(mcpConfigData.mcp || {}).length }} 个</span>
           </h2>
           <div class="flex gap-2 items-center">
-            <label class="flex items-center gap-1 text-[10px] text-ink-600 cursor-pointer select-none">
-              <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
-            </label>
-            <span class="text-[10px] text-brand-600">同步到</span>
-            <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
-              <option value="All">全部 IDE</option>
-              <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
-            </select>
-            <button @click="syncMcpFull" :disabled="syncing" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50 font-medium">
-              {{ syncing ? '同步中...' : '同步到 IDE' }}
-            </button>
             <button @click="toggleAllMcp(true)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全选</button>
             <button @click="toggleAllMcp(false)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全不选</button>
-            <button @click="saveMcpAll()" class="px-3 py-1.5 text-xs bg-ink-700 text-white rounded hover:bg-ink-900 font-medium">保存 mcp.yaml</button>
           </div>
         </div>
         <div class="space-y-2 mb-4">
@@ -485,19 +479,7 @@
             <button @click="skillTab='market'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', skillTab==='market' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">市场检索</button>
             <button @click="skillTab='manual'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', skillTab==='manual' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">手动安装</button>
           </div>
-          <div class="flex gap-2 items-center">
-            <label class="flex items-center gap-1 text-[10px] text-ink-600 cursor-pointer select-none">
-              <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
-            </label>
-            <span class="text-[10px] text-brand-600">同步到</span>
-            <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
-              <option value="All">全部 IDE</option>
-              <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
-            </select>
-            <button @click="syncScopeToIde('skill')" :disabled="syncing" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50 font-medium">
-              {{ syncing ? '同步中...' : '同步到 IDE' }}
-            </button>
-          </div>
+          <span class="text-[10px] text-ink-500">{{ skillTab==='market' ? '从市场搜索并安装技能' : '输入 owner/repo 或 GitHub URL 安装' }}</span>
         </div>
 
         <!-- 子 tab：市场检索 -->
@@ -714,12 +696,12 @@ createApp({
     const ideLog = ref('');
     // 同步范围勾选（默认全部勾选）
     const syncScopes = reactive({ llm: true, mcp: true, skill: true, rules: true });
-    // 每个 tab 共享的同步目标 IDE
-    const syncTargetIde = ref('Codex');
+    // 共享的同步目标 IDE 列表（多选）
+    const syncTargetIdes = ref(['Codex']);
     // 当前是否正在同步
     const syncing = ref(false);
-    // 自动同步开关：开启后配置变更 debounce 自动保存+同步
-    const autoSync = ref(false);
+    // 自动同步开关：默认开启，配置变更 debounce 自动保存+同步
+    const autoSync = ref(true);
     let _autoSyncTimer = null;
     let _isLoading = true; // 加载阶段不触发自动同步
 
@@ -1070,7 +1052,9 @@ createApp({
       if (!r1.ok || !r2.ok) { toast('保存 mcp.yaml 失败', 'err'); return; }
       const g = await api('/api/init-env', { method:'POST' });
       if (!g.ok) { toast('生成 mcp.json 失败: ' + (g.error || ''), 'err'); return; }
-      await runSync(syncTargetIde.value, ['mcp']);
+      for (const ide of syncTargetIdes.value) {
+        await runSync(ide, ['mcp']);
+      }
     }
     // 编辑已有 MCP
     function startEditMcp(name) {
@@ -1176,7 +1160,9 @@ createApp({
       if (syncing.value) { toast('正在同步中，请稍候', 'warn'); return; }
       const sel = getSelectedInstalledSkills();
       if (!sel.length) { toast('请先勾选要同步的技能', 'warn'); return; }
-      await runSync(syncTargetIde.value, ['skill'], sel);
+      for (const ide of syncTargetIdes.value) {
+        await runSync(ide, ['skill'], sel);
+      }
     }
 
     // ===== IDE =====
@@ -1194,7 +1180,19 @@ createApp({
       if (scope === 'skill' && skills && !skills.length) { toast('请先勾选要同步的技能', 'warn'); return; }
       // 同步前自动保存对应配置（静默）
       if (scope === 'llm') await saveEnv(true);
-      await runSync(syncTargetIde.value, [scope], skills);
+      if (scope === 'mcp') await saveMcpAll(true);
+      // 同步到所有选中的 IDE
+      for (const ide of syncTargetIdes.value) {
+        await runSync(ide, [scope], skills);
+      }
+    }
+    // 顶部全局同步按钮：根据当前 tab 决定同步范围
+    async function syncCurrentScope() {
+      if (syncing.value) { toast('正在同步中，请稍候', 'warn'); return; }
+      if (!syncTargetIdes.value.length) { toast('请先选择目标 IDE', 'warn'); return; }
+      const scopeMap = { env: 'llm', mcp: 'mcp', skill: 'skill' };
+      const scope = scopeMap[tab.value];
+      if (scope) await syncScopeToIde(scope);
     }
     // 通用同步执行（skills 可选：仅同步勾选的技能）
     async function runSync(ide, scopes, skills) {
@@ -1237,10 +1235,12 @@ createApp({
           // 自动保存 llm + mcp
           await saveEnv(true);
           await saveMcpAll(true);
-          // 自动同步到选定 IDE（llm + mcp）
-          if (!syncing.value) {
+          // 自动同步到所有选定 IDE（llm + mcp）
+          if (!syncing.value && syncTargetIdes.value.length) {
             toast('自动同步中...');
-            await runSync(syncTargetIde.value, ['llm', 'mcp']);
+            for (const ide of syncTargetIdes.value) {
+              await runSync(ide, ['llm', 'mcp']);
+            }
           }
         }, 2000);
       },
@@ -1283,7 +1283,7 @@ createApp({
       mcpTab, mcpMarketQ, mcpMarketResults, mcpSearched, mcpForm, editingMcp, editMcpForm,
       skillTab, skillSources, skillSearchQ, skillSearchResults, skillSearchHint, skillSearched,
       manualSkillInput, installedSkills, selectedInstalledSkills, selectedInstalledCount,
-      ideList, ideLog, ideLogEl, syncScopes, syncTargetIde, syncing, autoSync,
+      ideList, ideLog, ideLogEl, syncScopes, syncTargetIdes, syncing, autoSync, syncCurrentScope,
       logVisible, logText, logEl, modalVisible, modalTitle, modalContent, toasts,
       toggleProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
       addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
