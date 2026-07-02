@@ -69,27 +69,23 @@
 
     <!-- ===================== LLM Provider 配置 (llm.yaml) ===================== -->
     <div v-show="tab === 'env'" class="space-y-4">
-      <!-- 同步到 IDE 工具条 -->
-      <div class="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
-        <span class="text-xs font-medium text-brand-700">同步 LLM 配置到</span>
-        <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
-          <option value="All">全部 IDE</option>
-          <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
-        </select>
-        <button @click="syncScopeToIde('llm')" :disabled="syncing" class="px-3 py-1 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50">
-          {{ syncing ? '同步中...' : '同步到 IDE' }}
-        </button>
-        <span class="text-[10px] text-brand-600 ml-1">仅同步 llm.yaml → 各 IDE settings</span>
-      </div>
       <div class="bg-white rounded-xl shadow-card p-5">
         <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
           <h2 class="text-sm font-semibold flex items-center gap-2">
             <span class="w-1 h-4 bg-brand-500 rounded"></span>LLM Providers
             <span class="text-[10px] text-ink-500 font-normal">llm.yaml</span>
           </h2>
-          <div class="flex gap-2">
+          <div class="flex gap-2 items-center">
+            <span class="text-[10px] text-brand-600">同步到</span>
+            <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
+              <option value="All">全部 IDE</option>
+              <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
+            </select>
+            <button @click="syncScopeToIde('llm')" :disabled="syncing" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50 font-medium">
+              {{ syncing ? '同步中...' : '同步到 IDE' }}
+            </button>
             <button @click="addProvider" class="px-3 py-1.5 text-xs bg-brand-50 text-brand-600 rounded-md hover:bg-brand-100 font-medium">+ 添加 Provider</button>
-            <button @click="saveEnv" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded-md hover:bg-brand-600 font-medium">保存 llm.yaml</button>
+            <button @click="saveEnv" class="px-3 py-1.5 text-xs bg-ink-700 text-white rounded-md hover:bg-ink-900 font-medium">保存 llm.yaml</button>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3 mb-4">
@@ -344,19 +340,6 @@
 
     <!-- ===================== MCP 配置（市场搜索 / 手动添加 → 已配置 + 密钥） ===================== -->
     <div v-show="tab === 'mcp'" class="space-y-4">
-      <!-- 同步到 IDE 工具条 -->
-      <div class="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
-        <span class="text-xs font-medium text-brand-700">同步 MCP 配置到</span>
-        <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
-          <option value="All">全部 IDE</option>
-          <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
-        </select>
-        <button @click="syncMcpFull" :disabled="syncing" class="px-3 py-1 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50">
-          {{ syncing ? '同步中...' : '同步到 IDE' }}
-        </button>
-        <span class="text-[10px] text-brand-600 ml-1">勾选启用 → 生成 mcp.json → 同步到 IDE</span>
-      </div>
-
       <!-- 添加方式（子 tab：市场搜索 / 手动添加） -->
       <div class="bg-white rounded-xl shadow-card p-5">
         <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
@@ -418,11 +401,18 @@
             <span class="w-1 h-4 bg-brand-500 rounded"></span>已配置
             <span class="text-[10px] text-ink-500 font-normal">{{ Object.keys(mcpTemplate.mcpServers || {}).length }} 个 · 启用 {{ mcpEnabledCount }} · 密钥 {{ Object.keys(mcpConfigData.mcp || {}).length }} 个</span>
           </h2>
-          <div class="flex gap-2">
+          <div class="flex gap-2 items-center">
+            <span class="text-[10px] text-brand-600">同步到</span>
+            <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
+              <option value="All">全部 IDE</option>
+              <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
+            </select>
+            <button @click="syncMcpFull" :disabled="syncing" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50 font-medium">
+              {{ syncing ? '同步中...' : '同步到 IDE' }}
+            </button>
             <button @click="toggleAllMcp(true)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全选</button>
             <button @click="toggleAllMcp(false)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全不选</button>
-            <button @click="saveMcpAll" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600">保存 mcp.yaml</button>
-            <span class="text-[10px] text-ink-500 self-center ml-1">保存后点顶部「同步到 IDE」自动生成各 IDE 格式</span>
+            <button @click="saveMcpAll" class="px-3 py-1.5 text-xs bg-ink-700 text-white rounded hover:bg-ink-900 font-medium">保存 mcp.yaml</button>
           </div>
         </div>
         <div class="space-y-2 mb-4">
@@ -482,18 +472,6 @@
 
     <!-- ===================== Skill 安装 ===================== -->
     <div v-show="tab === 'skill'" class="space-y-4">
-      <!-- 同步到 IDE 工具条 -->
-      <div class="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
-        <span class="text-xs font-medium text-brand-700">同步 Skill 配置到</span>
-        <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
-          <option value="All">全部 IDE</option>
-          <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
-        </select>
-        <button @click="syncScopeToIde('skill')" :disabled="syncing" class="px-3 py-1 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50">
-          {{ syncing ? '同步中...' : '同步到 IDE' }}
-        </button>
-        <span class="text-[10px] text-brand-600 ml-1">仅同步 agents/skills → 各 IDE skills/</span>
-      </div>
       <!-- 添加方式（子 tab：市场检索 / 手动安装） -->
       <div class="bg-white rounded-xl shadow-card p-5">
         <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
@@ -501,7 +479,16 @@
             <button @click="skillTab='market'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', skillTab==='market' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">市场检索</button>
             <button @click="skillTab='manual'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', skillTab==='manual' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">手动安装</button>
           </div>
-          <span class="text-[10px] text-ink-500">{{ skillTab==='market' ? '从市场搜索并安装技能' : '输入 owner/repo 或 GitHub URL 安装' }}</span>
+          <div class="flex gap-2 items-center">
+            <span class="text-[10px] text-brand-600">同步到</span>
+            <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
+              <option value="All">全部 IDE</option>
+              <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
+            </select>
+            <button @click="syncScopeToIde('skill')" :disabled="syncing" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50 font-medium">
+              {{ syncing ? '同步中...' : '同步到 IDE' }}
+            </button>
+          </div>
         </div>
 
         <!-- 子 tab：市场检索 -->
