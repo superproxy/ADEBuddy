@@ -14,27 +14,16 @@ if not exist ".agents" mkdir ".agents"
 if not exist ".agents\skills" mkdir ".agents\skills"
 echo.
 
-echo [3/12] Install core plugin...
-if exist "agents\plugins\core.plugin.json" (
-    python scripts\plugin-manager.py install agents\plugins\core.plugin.json
+
+echo [5/12] Install office plugin...
+if exist "agents\plugins\office.plugin.json" (
+    python scripts\plugin-manager.py install agents\plugins\office.plugin.json
 )
 echo.
 
-echo [4/12] Install computer-use plugin...
-if exist "agents\plugins\computer-use.plugin.json" (
-    python scripts\plugin-manager.py install agents\plugins\computer-use.plugin.json
-)
-echo.
-
-echo [5/12] Install browser-use plugin...
-if exist "agents\plugins\browser-use.plugin.json" (
-    python scripts\plugin-manager.py install agents\plugins\browser-use.plugin.json
-)
-echo.
-
-echo [6/12] Install enhance-dev-design plugin...
-if exist "agents\plugins\enhance-dev.json" (
-    python scripts\plugin-manager.py install agents\plugins\enhance-dev.json
+echo [6/12] Install dev plugin...
+if exist "agents\plugins\dev.plugin.json" (
+    python scripts\plugin-manager.py install agents\plugins\dev.plugin.json
 )
 echo.
 
@@ -50,16 +39,6 @@ if exist "agents\plugins\productivity.plugin.json" (
 )
 echo.
 
-echo [9/12] Install dev-tools plugin...
-if exist "agents\plugins\dev-tools.plugin.json" (
-    python scripts\plugin-manager.py install agents\plugins\dev-tools.plugin.json
-)
-echo.
-
-echo [10/12] Install mattpocock plugin...
-if exist "agents\plugins\mattpocock.plugin.json" (
-    python scripts\plugin-manager.py install agents\plugins\mattpocock.plugin.json
-)
 echo.
 
 echo [11/12] Install superpowers plugin...

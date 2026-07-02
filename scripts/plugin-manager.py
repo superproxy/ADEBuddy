@@ -130,12 +130,67 @@ def update_mcp_template(mcp_template_path: Path, plugin_config: dict) -> None:
         print(f"{COLOR_GREEN}[OK] MCP模板已更新: {mcp_template_path}{COLOR_RESET}")
 
 
-def build_install_command(skill_config: dict or str) -> tuple[str, str]:
-    """构建安装命令，返回 (skill_name, install_command)"""
+def parse_shorthand(source_str: str) -> tuple[str, str]:
+    """
+    解析 owner/repo@skill 简写格式，返回 (source, skill)。
+    - "vercel-labs/skills@find-skills" → ("vercel-labs/skills", "find-skills")
+    - "vercel-labs/skills"             → ("vercel-labs/skills", "")
+    - "find-skills"                    → ("", "find-skills")  # 无 /，当作 skill name
+    - "git@github.com:owner/repo.git"  → ("git@github.com:owner/repo.git", "")  # git URL 不拆
+    - "https://github.com/owner/repo"  → ("https://github.com/owner/repo", "")  # URL 不拆
+    """
+    if not source_str:
+        return ("", "")
+
+    stripped = source_str.strip()
+
+    # URL / git URL / ssh URL：不解析 @ 简写
+    if (stripped.startswith("http://")
+            or stripped.startswith("https://")
+            or stripped.startswith("git@")
+            or stripped.startswith("ssh://")
+            or stripped.startswith("git://")):
+        return (stripped, "")
+
+    # 无 /：当作简单 skill name
+    if "/" not in stripped:
+        return ("", stripped)
+
+    # owner/repo 形式：检查最后一个 / 之后是否有 @
+    last_slash_idx = stripped.rfind("/")
+    after_slash = stripped[last_slash_idx + 1:]
+    at_idx = after_slash.find("@")
+    if at_idx >= 0:
+        # 拆分 source 和 skill
+        source = stripped[:last_slash_idx + 1 + at_idx]
+        skill = after_slash[at_idx + 1:]
+        return (source, skill)
+    return (stripped, "")
+
+
+def build_install_command(skill_config: dict or str, use_symlink: bool = False) -> tuple[str, str]:
+    """构建安装命令，返回 (skill_name, install_command)
+
+    use_symlink:
+      - False（默认）：加 --copy 强制复制，避免 Trae 沙箱等环境下 symlink 创建失败
+                       导致 npx fallback 到全局 ~/.agents/skills/，项目目录反而没有该 skill。
+      - True：不加 --copy，使用 npx 默认行为（可能对部分 IDE 用 symlink）。
+
+    支持的配置形式：
+      - "find-skills"                                    → npx skills add find-skills --copy -y
+      - "vercel-labs/skills"                             → npx skills add vercel-labs/skills --copy -y
+      - "vercel-labs/skills@find-skills"                 → npx skills add vercel-labs/skills --skill find-skills --copy -y
+      - "npx skills add owner/repo --skill foo -y"       → 原样执行（用户完整命令不强制改）
+      - {"name": "foo", "source": "owner/repo", "skill": "foo"}
+      - {"name": "foo", "source": "owner/repo@foo"}      → @ 简写，拆分后等价于上一行
+      - {"name": "foo", "url": "https://..."}            → 第三方市场 URL
+    """
     skill_name = ""
+    # 默认 --copy 强制复制；启用 symlink 时留空
+    copy_flag = "" if use_symlink else "--copy"
 
     if isinstance(skill_config, dict):
-        # 新格式：对象格式
+        # 对象格式
         explicit_skill = skill_config.get("skill", "")
         skill_name = explicit_skill or skill_config.get("name", "")
         source = skill_config.get("source", "")
@@ -143,45 +198,70 @@ def build_install_command(skill_config: dict or str) -> tuple[str, str]:
 
         if url:
             # 第三方市场 URL
-            install_command = f"npx skills add {url} --skill {skill_name} -y"
+            install_command = f"npx skills add {url} --skill {skill_name} {copy_flag} -y".strip()
         elif source:
-            # 有 source：如果显式指定了 skill 字段则安装单个，否则安装整个集合
-            if explicit_skill:
-                install_command = f"npx skills add {source} --skill {explicit_skill} -y"
+            # 尝试从 source 解析 @ 简写（仅当未显式指定 skill 时）
+            parsed_source, parsed_skill = parse_shorthand(source)
+            if not explicit_skill and parsed_skill:
+                # source 含 @ 简写，且未显式指定 skill → 用解析结果
+                effective_source = parsed_source
+                effective_skill = parsed_skill
+                skill_name = effective_skill or skill_name
             else:
-                install_command = f"npx skills add {source} -y"
+                effective_source = source
+                effective_skill = explicit_skill
+
+            if effective_skill:
+                install_command = f"npx skills add {effective_source} --skill {effective_skill} {copy_flag} -y".strip()
+            else:
+                install_command = f"npx skills add {effective_source} {copy_flag} -y".strip()
         else:
-            # 只有 skill name 的情况
-            install_command = f"npx skills add {skill_name} -y"
+            # 只有 skill name
+            install_command = f"npx skills add {skill_name} {copy_flag} -y".strip()
     elif isinstance(skill_config, str):
-        # 字符串格式：可能是命令或名称
+        # 字符串格式
         if skill_config.startswith("npx"):
-            # 完整命令
+            # 完整命令，原样执行（用户明确写的命令不强制改）
             install_command = skill_config
-            # 尝试解析 skill name
             import re
             match = re.search(r'--skill\s+([^\s]+)', install_command)
             if match:
                 skill_name = match.group(1)
             else:
-                # 简单格式：npx skills add xxx -y
+                # 无 --skill，尝试解析 add 后的源是否含 @ 简写
                 match = re.search(r'add\s+([^\s]+)', install_command)
                 if match:
-                    skill_name = match.group(1)
+                    raw_source = match.group(1)
+                    _, parsed_skill = parse_shorthand(raw_source)
+                    skill_name = parsed_skill or raw_source
         else:
-            # 只是 skill name
-            skill_name = skill_config
-            install_command = f"npx skills add {skill_name} -y"
+            # 简写或名称：尝试解析 @ 简写
+            parsed_source, parsed_skill = parse_shorthand(skill_config)
+            if parsed_source and parsed_skill:
+                # owner/repo@skill 简写
+                skill_name = parsed_skill
+                install_command = f"npx skills add {parsed_source} --skill {parsed_skill} {copy_flag} -y".strip()
+            elif parsed_source:
+                # 仅 owner/repo，安装整个集合
+                skill_name = parsed_source
+                install_command = f"npx skills add {parsed_source} {copy_flag} -y".strip()
+            else:
+                # 仅 skill name
+                skill_name = parsed_skill
+                install_command = f"npx skills add {parsed_skill} {copy_flag} -y".strip()
     else:
         skill_name = str(skill_config)
-        install_command = f"npx skills add {skill_name} -y"
+        install_command = f"npx skills add {skill_name} {copy_flag} -y".strip()
 
+    # 规范化：把多余空格压缩（copy_flag 为空时避免双空格）
+    import re as _re
+    install_command = _re.sub(r'\s+', ' ', install_command).strip()
     return skill_name, install_command
 
 
-def install_skill(skill_config: dict or str, source_dir: Path = None) -> None:
+def install_skill(skill_config: dict or str, source_dir: Path = None, use_symlink: bool = False) -> None:
     """安装技能：优先检查本地缓存"""
-    skill_name, install_command = build_install_command(skill_config)
+    skill_name, install_command = build_install_command(skill_config, use_symlink=use_symlink)
 
     if not skill_name and source_dir:
         print(f"{COLOR_YELLOW}[!] Could not determine skill name, skipping{COLOR_RESET}")
@@ -213,26 +293,50 @@ def install_skill(skill_config: dict or str, source_dir: Path = None) -> None:
     # 从远程安装
     print(f"{COLOR_MAGENTA}[-] Installing skill: {install_command}{COLOR_RESET}")
 
+    # npx skills add 默认安装到 cwd 下的 .agents/skills/，
+    # 必须把工作目录设为项目根，否则会装到全局 ~/.agents/skills/ 或错误位置
+    install_cwd = source_dir if source_dir else None
+
     try:
         result = subprocess.run(
             install_command,
             shell=True,
-            capture_output=True,
+            capture_output=False,
             text=True,
             encoding='utf-8',
-            errors='ignore'
+            errors='ignore',
+            cwd=install_cwd
         )
         if result.returncode == 0:
-            print(f"{COLOR_GREEN}[OK] Skill installed successfully{COLOR_RESET}")
+            # 验证 skill 是否真的装到项目 .agents/skills/<name>
+            if source_dir and skill_name:
+                expected = source_dir / ".agents" / "skills" / skill_name
+                if expected.exists():
+                    print(f"{COLOR_GREEN}[OK] Skill installed successfully{COLOR_RESET}")
+                else:
+                    # npx 可能装到了全局 ~/.agents/skills/，提示用户
+                    home_skill = Path.home() / ".agents" / "skills" / skill_name
+                    if home_skill.exists():
+                        print(f"{COLOR_YELLOW}[!] Skill installed to global dir: {home_skill}{COLOR_RESET}")
+                        print(f"    期望位置: {expected}")
+                        print(f"    可手动复制或加 -g 标志确认全局安装意图{COLOR_RESET}")
+                    else:
+                        print(f"{COLOR_YELLOW}[!] Skill install reported success but not found at: {expected}{COLOR_RESET}")
+            else:
+                print(f"{COLOR_GREEN}[OK] Skill installed successfully{COLOR_RESET}")
         else:
-            print(f"{COLOR_RED}[!] Skill install failed{COLOR_RESET}")
-            print(f"    Error: {result.stderr}")
+            print(f"{COLOR_RED}[!] Skill install failed (exit={result.returncode}){COLOR_RESET}")
     except Exception as e:
         print(f"{COLOR_RED}[!] Skill install error: {e}{COLOR_RESET}")
 
 
 def run_plugin_scripts(plugin_config: dict) -> None:
-    """执行插件脚本"""
+    """执行插件脚本
+
+    注意：install 脚本失败或超时不阻塞后续 skill 安装，只告警。
+    原因：scripts.install 常含 npm i -g / browser setup 等可能交互或耗时的命令，
+    卡住或失败不应导致 skill 安装（步骤 4）无法执行。
+    """
     if "scripts" not in plugin_config:
         return
 
@@ -243,27 +347,29 @@ def run_plugin_scripts(plugin_config: dict) -> None:
         install_cmd = scripts["install"]
         print(f"{COLOR_MAGENTA}[~] 执行插件安装脚本: {install_cmd}{COLOR_RESET}")
         try:
+            # 不 capture_output，让用户看到实时进度（避免交互式命令卡死时无任何输出）
+            # 设置 timeout 防止交互式命令无限阻塞后续 skill 安装
             result = subprocess.run(
                 install_cmd,
                 shell=True,
-                capture_output=True,
+                timeout=300,  # 5 分钟超时，避免 browser setup 卡死
+                capture_output=False,
                 text=True,
                 encoding='utf-8',
                 errors='ignore'
             )
             if result.returncode == 0:
                 print(f"{COLOR_GREEN}[OK] 脚本执行成功{COLOR_RESET}")
-                if result.stdout:
-                    print(f"    Output: {result.stdout}")
             else:
-                print(f"{COLOR_RED}[!] 脚本执行失败{COLOR_RESET}")
-                if result.stderr:
-                    print(f"    Error: {result.stderr}")
+                # 失败不阻塞，继续安装 skill
+                print(f"{COLOR_YELLOW}[!] 脚本执行失败 (exit={result.returncode})，继续安装 skill{COLOR_RESET}")
+        except subprocess.TimeoutExpired:
+            print(f"{COLOR_YELLOW}[!] 脚本执行超时 (>300s)，可能为交互式命令，继续安装 skill{COLOR_RESET}")
         except Exception as e:
-            print(f"{COLOR_RED}[!] 脚本执行错误: {e}{COLOR_RESET}")
+            print(f"{COLOR_YELLOW}[!] 脚本执行错误: {e}，继续安装 skill{COLOR_RESET}")
 
 
-def install_skills(plugin_config: dict, source_dir: Path) -> None:
+def install_skills(plugin_config: dict, source_dir: Path, use_symlink: bool = False) -> None:
     """安装插件所需技能"""
     if "skills" not in plugin_config:
         return
@@ -271,7 +377,7 @@ def install_skills(plugin_config: dict, source_dir: Path) -> None:
     skills = plugin_config["skills"]
 
     for skill in skills:
-        install_skill(skill, source_dir)
+        install_skill(skill, source_dir, use_symlink=use_symlink)
 
 
 def install_plugin(
@@ -279,7 +385,8 @@ def install_plugin(
     env_path: Path,
     mcp_template_path: Path,
     source_dir: Path,
-    dry_run: bool = False
+    dry_run: bool = False,
+    use_symlink: bool = False
 ) -> None:
     """安装插件"""
     print(f"{COLOR_CYAN}{'=' * 40}{COLOR_RESET}")
@@ -312,7 +419,7 @@ def install_plugin(
     run_plugin_scripts(plugin_config)
 
     print(f"\n{COLOR_MAGENTA}步骤 4/4: 安装技能{COLOR_RESET}")
-    install_skills(plugin_config, source_dir)
+    install_skills(plugin_config, source_dir, use_symlink=use_symlink)
 
     print(f"\n{COLOR_GREEN}{'=' * 40}{COLOR_RESET}")
     print(f"{COLOR_GREEN}  插件安装完成！{COLOR_RESET}")
@@ -385,6 +492,11 @@ def main() -> None:
         help="模拟运行，不进行实际修改"
     )
     install_parser.add_argument(
+        "--symlink",
+        action="store_true",
+        help="使用 symlink 安装 skill（默认 --copy 强制复制，避免沙箱环境下 symlink 失败导致装到全局）"
+    )
+    install_parser.add_argument(
         "--source-dir",
         default="",
         help="源目录路径 (默认: 当前目录)"
@@ -421,7 +533,8 @@ def main() -> None:
             env_path,
             mcp_template_path,
             source_dir,
-            args.dry_run
+            args.dry_run,
+            use_symlink=args.symlink
         )
     elif args.command == "list":
         plugins_dir = source_dir / args.plugins_dir
@@ -551,6 +664,11 @@ def main() -> None:
         help="模拟运行，不进行实际修改"
     )
     install_parser.add_argument(
+        "--symlink",
+        action="store_true",
+        help="使用 symlink 安装 skill（默认 --copy 强制复制，避免沙箱环境下 symlink 失败导致装到全局）"
+    )
+    install_parser.add_argument(
         "--source-dir",
         default="",
         help="源目录路径 (默认: 当前目录)"
@@ -632,7 +750,8 @@ def main() -> None:
             env_path,
             mcp_template_path,
             source_dir,
-            args.dry_run
+            args.dry_run,
+            use_symlink=args.symlink
         )
     elif args.command == "list":
         plugins_dir = source_dir / args.plugins_dir

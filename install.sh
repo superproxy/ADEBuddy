@@ -12,28 +12,17 @@ echo "[2/12] Preparing .agents/skills directory..."
 mkdir -p .agents/skills
 echo ""
 
-echo "[3/12] Install core plugin..."
-if [ -f "agents/plugins/core.plugin.json" ]; then
-    python3 scripts/plugin-manager.py install agents/plugins/core.plugin.json
-fi
-echo ""
-
-echo "[4/12] Install computer-use plugin..."
-if [ -f "agents/plugins/computer-use.plugin.json" ]; then
-    python3 scripts/plugin-manager.py install agents/plugins/computer-use.plugin.json
-fi
-echo ""
-
-echo "[5/12] Install browser-use plugin..."
-if [ -f "agents/plugins/browser-use.plugin.json" ]; then
-    python3 scripts/plugin-manager.py install agents/plugins/browser-use.plugin.json
+echo "[3/12] Install office plugin..."
+if [ -f "agents/plugins/office.plugin.json" ]; then
+    python3 scripts/plugin-manager.py install agents/plugins/office.plugin.json
 fi
 echo ""
 
 
-echo "[6/12] Install enhance-dev-design plugin..."
-if [ -f "agents/plugins/enhance-dev.json" ]; then
-    python3 scripts/plugin-manager.py install agents/plugins/enhance-dev.json
+
+echo "[6/12] Install dev plugin..."
+if [ -f "agents/plugins/dev.plugin.json" ]; then
+    python3 scripts/plugin-manager.py install agents/plugins/dev.plugin.json
 fi
 echo ""
 
@@ -46,24 +35,6 @@ echo ""
 echo "[8/12] Install productivity plugin..."
 if [ -f "agents/plugins/productivity.plugin.json" ]; then
     python3 scripts/plugin-manager.py install agents/plugins/productivity.plugin.json
-fi
-echo ""
-
-echo "[9/12] Install dev-tools plugin..."
-if [ -f "agents/plugins/dev-tools.plugin.json" ]; then
-    python3 scripts/plugin-manager.py install agents/plugins/dev-tools.plugin.json
-fi
-echo ""
-
-echo "[10/12] Install mattpocock plugin..."
-if [ -f "agents/plugins/mattpocock.plugin.json" ]; then
-    python3 scripts/plugin-manager.py install agents/plugins/mattpocock.plugin.json
-fi
-echo ""
-
-echo "[11/12] Install superpowers plugin..."
-if [ -f "agents/plugins/superpowers.plugin.json" ]; then
-    python3 scripts/plugin-manager.py install agents/plugins/superpowers.plugin.json
 fi
 echo ""
 

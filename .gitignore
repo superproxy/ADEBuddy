@@ -15,6 +15,13 @@ temp_parse.py
 agents/skills/bid-to-tender-skills
 ide/codex/auth.json
 
+.agents
+.idea
+.claude
+.qoder
+.trae
+
+
 # === Python ===
 # 字节码文件 / 编译产物
 __pycache__/
