@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 > nul
 echo ========================================
-echo   MyAgentPlugin Install Script
+echo   AgentBuddy Install Script
 echo ========================================
 echo.
 

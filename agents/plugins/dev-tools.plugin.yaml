@@ -1,7 +1,7 @@
 name: dev-tools
 version: 1.0.0
 description: 开发工具插件 - 提供 RESTful API 设计、测试、代码审查等能力
-author: MyAgentPlugin
+author: AgentBuddy
 mcpServers:
   context7:
     type: http

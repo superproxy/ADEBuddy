@@ -1,6 +1,14 @@
 # MCP 本地密钥配置（包含真实 API Key）
 agents/mcp/mcp.json
 
+# 根目录本地密钥/运行态文件（禁止提交）
+/llm.yaml
+/mcp.yaml
+/agents/skills/skill.yaml
+
+# Codex 运行态配置（由脚本生成）
+.codex/
+
 # MCP 运行时配置（由 init-mcp-env 脚本从模板生成，包含真实密钥）
 agents/mcp/mcp.json
 env.local.yaml

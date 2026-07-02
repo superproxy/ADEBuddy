@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "========================================"
-echo "  MyAgentPlugin Install Script"
+echo "  AgentBuddy Install Script"
 echo "========================================"
 echo ""
 

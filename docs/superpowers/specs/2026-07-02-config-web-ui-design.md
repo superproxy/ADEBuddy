@@ -6,7 +6,7 @@
 
 ## 1. 背景与目标
 
-为 `MyAgentPlugin` 仓库提供一个本地 Web 配置工具，替代纯 CLI 操作，让团队成员（前端/后端/设计/产品）能通过浏览器完成：
+为 `AgentBuddy` 仓库提供一个本地 Web 配置工具，替代纯 CLI 操作，让团队成员（前端/后端/设计/产品）能通过浏览器完成：
 
 1. **env 配置**：可视化编辑 `env.yaml`（LLM providers、MCP 密钥、embedding/tts/asr/vision 等）
 2. **插件组装**：从技能目录 + MCP 目录勾选，组装 `plugin.json` 定义并安装

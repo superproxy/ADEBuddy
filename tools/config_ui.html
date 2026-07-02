@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>MyAgentPlugin 配置工具</title>
+<title>AgentBuddy 配置工具</title>
 <script src="/static/vue.global.prod.js"></script>
 <script src="/static/tailwind.jit.js"></script>
 <style type="text/tailwindcss">
@@ -43,9 +43,9 @@
   <header class="gradient-bg text-white shadow-lg sticky top-0 z-30">
     <div class="max-w-[1600px] mx-auto px-6 py-3 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center font-bold text-lg shadow-md">M</div>
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center font-bold text-lg shadow-md">A</div>
         <div>
-          <h1 class="text-base font-semibold">MyAgentPlugin 配置工具</h1>
+          <h1 class="text-base font-semibold">AgentBuddy 配置工具</h1>
           <div class="text-xs text-white/60" v-html="metaInfo"></div>
         </div>
       </div>
@@ -690,7 +690,7 @@ createApp({
     const importedIdeSkills = ref([]);  // 导入栏勾选的 Skills
     const selectedLlm = ref([]);  // 已选 LLM（"provider@protocol"）
     const wizardStep = ref(0);  // 向导当前步骤 0-4
-    const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'MyAgentPlugin' });
+    const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'AgentBuddy' });
 
     const mcpTab = ref('market');  // MCP 添加方式子 tab：market / manual
     const mcpMarketQ = ref('');
@@ -968,7 +968,7 @@ createApp({
       if (!r.ok) { toast('加载失败: ' + r.error, 'err'); return; }
       const d = r.data;
       pluginForm.name = d.name || ''; pluginForm.version = d.version || '1.0.0';
-      pluginForm.description = d.description || ''; pluginForm.author = d.author || 'MyAgentPlugin';
+      pluginForm.description = d.description || ''; pluginForm.author = d.author || 'AgentBuddy';
       selectedSkills.value = [...(d.skills || [])].map(s => typeof s === 'string' ? s : s.name || s.skill || '');
       selectedMcp.value = Object.keys(d.mcpServers || {});
       selectedLlm.value = (d.llm || []).map(l => l.provider + '@' + l.protocol);
@@ -982,7 +982,7 @@ createApp({
     }
     function newPlugin() {
       selectedPluginFile.value = '';
-      pluginForm.name = ''; pluginForm.version = '1.0.0'; pluginForm.description = ''; pluginForm.author = 'MyAgentPlugin';
+      pluginForm.name = ''; pluginForm.version = '1.0.0'; pluginForm.description = ''; pluginForm.author = 'AgentBuddy';
       selectedSkills.value = []; selectedMcp.value = []; selectedLlm.value = [];
       wizardStep.value = 0;
     }
@@ -999,7 +999,7 @@ createApp({
       }).filter(l => l.provider);
       return {
         name: pluginForm.name.trim(), version: pluginForm.version.trim() || '1.0.0',
-        description: pluginForm.description.trim(), author: pluginForm.author.trim() || 'MyAgentPlugin',
+        description: pluginForm.description.trim(), author: pluginForm.author.trim() || 'AgentBuddy',
         mcpServers: Object.fromEntries(selectedMcp.value.map(n => [n, mcpTemplate.mcpServers[n]])),
         skills: selectedSkills.value.map(s => ({ name: s, description: '' })),
         llm: llmList,
