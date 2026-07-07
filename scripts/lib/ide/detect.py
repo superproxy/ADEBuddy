@@ -352,6 +352,204 @@ def _check_macos_app(app_path: str) -> bool:
     return sys.platform == "darwin" and Path(app_path).exists()
 
 
+# ===== Windows 注册表 + 开始菜单快捷方式兜底探测 =====
+# 当 windows_apps 路径列表探测失败时，回退到系统卸载注册表和开始菜单快捷方式，
+# 这能识别用户安装在非默认路径、或厂商改名的 IDE（如 OpenCode 桌面版安装在
+# @opencode-aidesktop 目录、Trae Work CN 注册名为 "TRAE Work CN" 等）。
+_REGISTRY_CACHE: list[dict] | None = None
+_STARTMENU_CACHE: dict[str, str] | None = None
+
+
+def _normalize_id(s: str) -> str:
+    """规范化 IDE 标识用于匹配：去空格/标点，转小写。
+
+    例："Trae CN" -> "traecn", "TRAE Work CN (User)" -> "traeworkcnuser",
+        "IntelliJ IDEA 2026.1.3" -> "intellijidea202613"
+    """
+    import re
+    return re.sub(r"[\s\(\)\.\-_]", "", s).lower()
+
+
+def _scan_registry_uninstall() -> list[dict]:
+    """扫描 Windows 卸载注册表，返回 [{name, icon, location}] 列表（带缓存）。
+
+    覆盖 HKLM 64/32 位和 HKCU 三个根，能识别 user-scope 安装的 IDE。
+    """
+    global _REGISTRY_CACHE
+    if _REGISTRY_CACHE is not None:
+        return _REGISTRY_CACHE
+    if sys.platform != "win32":
+        _REGISTRY_CACHE = []
+        return _REGISTRY_CACHE
+    import winreg
+    roots = [
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ]
+    entries = []
+    for root, subkey in roots:
+        try:
+            with winreg.OpenKey(root, subkey) as key:
+                index = 0
+                while True:
+                    try:
+                        subname = winreg.EnumKey(key, index)
+                        index += 1
+                    except OSError:
+                        break
+                    try:
+                        with winreg.OpenKey(key, subname) as sk:
+                            name = winreg.QueryValueEx(sk, "DisplayName")[0]
+                            icon = ""
+                            try:
+                                icon = winreg.QueryValueEx(sk, "DisplayIcon")[0]
+                            except FileNotFoundError:
+                                pass
+                            location = ""
+                            try:
+                                location = winreg.QueryValueEx(sk, "InstallLocation")[0]
+                            except FileNotFoundError:
+                                pass
+                            if name:
+                                entries.append({
+                                    "name": str(name),
+                                    "icon": str(icon).split(",")[0].strip('"').strip(),
+                                    "location": str(location).strip('"').strip(),
+                                })
+                    except FileNotFoundError:
+                        continue
+        except FileNotFoundError:
+            continue
+    _REGISTRY_CACHE = entries
+    return entries
+
+
+def _scan_start_menu_shortcuts() -> dict[str, str]:
+    """扫描开始菜单 .lnk 快捷方式，返回 {name_stem: target_path}（带缓存）。
+
+    覆盖 user 和 all-users 两个 Start Menu\Programs 目录。
+    """
+    global _STARTMENU_CACHE
+    if _STARTMENU_CACHE is not None:
+        return _STARTMENU_CACHE
+    if sys.platform != "win32":
+        _STARTMENU_CACHE = {}
+        return _STARTMENU_CACHE
+    result: dict[str, str] = {}
+    paths = [
+        os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs"),
+        os.path.join(os.environ.get("ProgramData", r"C:\Program Data"), "Microsoft", "Windows", "Start Menu", "Programs"),
+    ]
+    try:
+        import win32com.client  # pywin32
+        shell = win32com.client.Dispatch("WScript.Shell")
+    except ImportError:
+        # pywin32 不可用时退回powershell方案（一次性、不缓存）
+        try:
+            import subprocess as _sp
+            cmd = (
+                "$paths=@('"
+                + "','".join(paths)
+                + "'); foreach($p in $paths){ if(Test-Path $p){"
+                "Get-ChildItem -Path $p -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {"
+                "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($_.FullName);"
+                "Write-Output ($_.BaseName+'|'+$s.TargetPath)}}}"
+            )
+            r = _sp.run(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                capture_output=True, text=True, timeout=10,
+                creationflags=0x08000000,
+            )
+            for line in r.stdout.splitlines():
+                if "|" in line:
+                    name, target = line.split("|", 1)
+                    if name and target and Path(target).exists():
+                        result[name.strip()] = target.strip()
+        except Exception:
+            pass
+        _STARTMENU_CACHE = result
+        return result
+
+    for p in paths:
+        base = Path(p)
+        if not base.exists():
+            continue
+        try:
+            for lnk in base.rglob("*.lnk"):
+                try:
+                    target = shell.CreateShortcut(str(lnk)).TargetPath
+                    if target and Path(target).exists():
+                        result[lnk.stem] = target
+                except Exception:
+                    continue
+        except (PermissionError, OSError):
+            continue
+    _STARTMENU_CACHE = result
+    return result
+
+
+def _lookup_windows_app_via_system(label: str) -> str:
+    """通过注册表 + 开始菜单快捷方式查找 Windows GUI exe（兜底）。
+
+    匹配规则：规范化后的 label 是否被规范化后的 DisplayName / 快捷方式名 包含。
+    避免误匹配：Trae CN 不会匹配到 "TRAE Work CN"（traecn 不是 traeworkcn 的子串）。
+
+    Returns:
+        找到的 exe 绝对路径（字符串），未找到返回空串。
+    """
+    if sys.platform != "win32" or not label:
+        return ""
+    norm_label = _normalize_id(label)
+    if not norm_label:
+        return ""
+
+    # 1. 注册表：DisplayIcon 通常指向真实 exe（如 "C:\...\Trae CN.exe,0"）
+    #    优先 InstallLocation + 重名 exe，其次 DisplayIcon
+    reg_hits = []
+    for entry in _scan_registry_uninstall():
+        norm_name = _normalize_id(entry["name"])
+        if norm_label in norm_name:
+            reg_hits.append(entry)
+    for entry in reg_hits:
+        # DisplayIcon 优先（直接是 exe 路径）
+        if entry["icon"] and entry["icon"].lower().endswith(".exe"):
+            p = Path(entry["icon"])
+            if p.exists():
+                return _realpath_case(str(p))
+    for entry in reg_hits:
+        # InstallLocation 下找 <label>.exe（去掉空格的版本）
+        if entry["location"]:
+            loc = Path(entry["location"])
+            if loc.is_dir():
+                # 试多种文件名变体：原 label、去空格、首字母大写
+                candidates = [
+                    f"{label}.exe",
+                    f"{label.replace(' ', '')}.exe",
+                ]
+                for cand in candidates:
+                    p = loc / cand
+                    if p.exists():
+                        return _realpath_case(str(p))
+                # 兜底：目录下任何与 label 同名（大小写不敏感）的 exe
+                label_norm = _normalize_id(label)
+                try:
+                    for f in loc.iterdir():
+                        if (f.is_file() and f.suffix.lower() == ".exe"
+                                and label_norm == _normalize_id(f.stem)):
+                            return _realpath_case(str(f))
+                except (PermissionError, OSError):
+                    pass
+
+    # 2. 开始菜单快捷方式：BaseName 通常就是产品名（如 "Trae CN.lnk"）
+    for name, target in _scan_start_menu_shortcuts().items():
+        if norm_label == _normalize_id(name) or norm_label in _normalize_id(name):
+            if target.lower().endswith(".exe") and Path(target).exists():
+                return _realpath_case(target)
+
+    return ""
+
+
 def _get_cli_version(exe_path: str) -> str:
     """尝试获取 CLI 版本（--version），失败返回空字符串。
 
@@ -440,12 +638,15 @@ def detect_ide(ide_key: str) -> dict:
             app_path = ap
             break
     if not app_path:
-        # Windows GUI exe 探测
+        # Windows GUI exe 探测：先按已知路径列表
         for wt in meta.get("windows_apps", []):
             hit = _check_windows_app(wt)
             if hit:
                 app_path = hit
                 break
+        # 兜底：注册表 + 开始菜单快捷方式（识别非默认路径、改名 IDE）
+        if not app_path:
+            app_path = _lookup_windows_app_via_system(meta.get("label", ""))
 
     # 3. 配置目录（仅信息展示，不影响 installed 判定）
     config_paths = _resolve_config_paths(meta.get("config_dirs", []))
