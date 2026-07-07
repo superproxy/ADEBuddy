@@ -7,6 +7,7 @@ import LogPanel from './components/LogPanel.vue'
 import IdeView from './views/IdeView.vue'
 import EnvView from './views/EnvView.vue'
 import McpView from './views/McpView.vue'
+import SkillView from './views/SkillView.vue'
 import PlaceholderView from './views/PlaceholderView.vue'
 import { useIdeStore } from './stores/ide'
 import { useEnvStore } from './stores/env'
@@ -39,6 +40,7 @@ onMounted(() => {
     <IdeView v-if="tab === 'ide'" />
     <EnvView v-else-if="tab === 'env'" />
     <McpView v-else-if="tab === 'mcp'" />
+    <SkillView v-else-if="tab === 'skill'" />
     <PlaceholderView v-else :label="tabs.find((t) => t.key === tab)?.label" />
   </main>
   <Toast />
