@@ -33,9 +33,16 @@ DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"
 
 # 绝不允许出现在产物中的文件名（ basename 匹配）
+# 这些是运行态文件（含真实 API Key），由脚本从 *.template.* 生成
 SENSITIVE_FILES = {
     "mcp.yaml", "llm.yaml", "mcp.json", "skill.yaml",
     "env.yaml", "env.local.yaml",
+    # IDE 运行态配置（含真实密钥，需从对应 *.template.* 生成）
+    "opencode.json",     # 模板: opencode.template.json
+    "settings.json",     # claude: settings.template.json
+    "auth.json",         # codex: auth.template.json
+    "config.toml",       # codex: config.template.toml
+    "config.yaml",       # proxy: config.template.yaml
 }
 # 绝不允许出现的密钥明文片段（命中即失败）
 SENSITIVE_TOKENS = [

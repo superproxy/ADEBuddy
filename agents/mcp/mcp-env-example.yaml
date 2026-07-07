@@ -59,6 +59,12 @@ mcpServers:
     - ./
     command: npx
     env: {}
+  everything-mcp:
+    args:
+      - -y
+      - everything-mcp
+    command: uvx
+    disabled: false
   firecrawl-mcp:
     args:
     - -y

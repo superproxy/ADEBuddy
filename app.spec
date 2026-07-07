@@ -17,9 +17,16 @@ import os
 block_cipher = None
 
 # 绝不允许进入 bundle 的文件名 / glob（basename 匹配）
+# 这些是运行态文件（含真实 API Key），由脚本从 *.template.* 生成
 SENSITIVE = {
     'mcp.yaml', 'llm.yaml', 'mcp.json', 'skill.yaml',
     'env.yaml', 'env.local.yaml', '.DS_Store',
+    # IDE 运行态配置（含真实密钥，需从对应 *.template.* 生成）
+    'opencode.json',          # 模板: opencode.template.json
+    'settings.json',          # claude: settings.template.json
+    'auth.json',              # codex: auth.template.json
+    'config.toml',            # codex: config.template.toml
+    'config.yaml',            # proxy: config.template.yaml
 }
 
 
