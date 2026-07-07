@@ -5,8 +5,10 @@ import Toast from './components/Toast.vue'
 import Modal from './components/Modal.vue'
 import LogPanel from './components/LogPanel.vue'
 import IdeView from './views/IdeView.vue'
+import EnvView from './views/EnvView.vue'
 import PlaceholderView from './views/PlaceholderView.vue'
 import { useIdeStore } from './stores/ide'
+import { useEnvStore } from './stores/env'
 
 const tab = ref('ide')
 const tabs = [
@@ -19,8 +21,10 @@ const tabs = [
 ]
 
 const ide = useIdeStore()
+const env = useEnvStore()
 onMounted(() => {
   ide.loadIdeDetect()
+  env.loadEnv()
 })
 </script>
 
@@ -28,6 +32,7 @@ onMounted(() => {
   <Header :tab="tab" :tabs="tabs" @update:tab="tab = $event" />
   <main class="max-w-[1600px] mx-auto px-6 py-5">
     <IdeView v-if="tab === 'ide'" />
+    <EnvView v-else-if="tab === 'env'" />
     <PlaceholderView v-else :label="tabs.find((t) => t.key === tab)?.label" />
   </main>
   <Toast />
