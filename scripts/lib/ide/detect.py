@@ -216,6 +216,7 @@ IDE_DETECT_META = {
         "config_dirs": [".kimi-code"],
         "sessions_subdir": "sessions",
         "is_tui": True,
+        "hidden": True,  # 扩展检测，不在 AIDE 管理页显示（非 IDE_REGISTRY 成员）
     },
     # 智谱 ZCode ADE（Agent Development Environment）
     "ZCode": {
@@ -758,7 +759,7 @@ def detect_ide(ide_key: str) -> dict:
 def detect_all() -> list[dict]:
     """检测所有支持的 IDE，返回列表（并行加速，按 key 字母升序）。"""
     from concurrent.futures import ThreadPoolExecutor
-    keys = sorted(IDE_DETECT_META.keys())
+    keys = sorted(k for k, v in IDE_DETECT_META.items() if not v.get("hidden"))
     with ThreadPoolExecutor(max_workers=min(len(keys), 8)) as ex:
         results = list(ex.map(detect_ide, keys))
     return results
