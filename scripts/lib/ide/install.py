@@ -75,7 +75,7 @@ IDE_INSTALL_META = {
         "homepage": "https://qoder.com.cn/cli",
     },
     "OpenClaw": {
-        "cli_install": {"method": "manual", "url": "https://github.com/openclaw/openclaw", "uninstall_cmd": "rm -f ~/.local/bin/openclaw && rm -rf ~/.local/share/openclaw"},
+        "cli_install": {"method": "npm", "package": "@anthropic-ai/claude-code", "uninstall_cmd": "rm -f ~/.local/bin/openclaw && rm -rf ~/.local/share/openclaw"},
         "app_install": {"method": "cask", "package": "openclaw"},
         "homepage": "https://github.com/openclaw/openclaw",
     },
@@ -85,7 +85,7 @@ IDE_INSTALL_META = {
         "homepage": "",
     },
     "WorkBuddy": {
-        "cli_install": {"method": "manual", "url": "https://github.com/workbuddy/workbuddy"},
+        "cli_install": {"method": "npm", "package": "@anthropic-ai/claude-code"},
         "app_install": {"method": "manual", "url": "https://github.com/workbuddy/workbuddy"},
         "homepage": "https://github.com/workbuddy/workbuddy",
     },
