@@ -102,7 +102,7 @@ IDE_DETECT_META = {
             "{ProgramFiles}/Trae CN/Trae CN.exe",
         ],
         "config_dirs": [".trae-cn", ".traecn"],
-        "sessions_subdir": "sessions",
+        "sessions_subdir": "memory/projects",
         "is_tui": False,
     },
     "TraeSoloCN": {
@@ -114,7 +114,7 @@ IDE_DETECT_META = {
             "{ProgramFiles}/Trae Solo CN/Trae Solo CN.exe",
         ],
         "config_dirs": [".trae-solo-cn", ".traesolocn"],
-        "sessions_subdir": "sessions",
+        "sessions_subdir": "memory/projects",
         "is_tui": False,
     },
     "OpenCode": {
@@ -229,7 +229,7 @@ IDE_DETECT_META = {
             "{ProgramFiles}/ZCode/ZCode.exe",
         ],
         "config_dirs": [".zcode"],
-        "sessions_subdir": "sessions",
+        "sessions_subdir": "cli/rollout",
         "is_tui": True,
     },
 }

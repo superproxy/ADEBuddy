@@ -31,6 +31,8 @@ export interface IdeSession {
   size_bytes: number
   cwd?: string
   updated_at: string
+  tool_calls?: number
+  file_path?: string
 }
 
 export interface IdeInstallInfo {

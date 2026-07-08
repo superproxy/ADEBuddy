@@ -116,7 +116,7 @@ const {
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <div class="text-xs font-medium truncate">{{ s.title || s.id.slice(0, 8) }}</div>
-                    <div class="text-[10px] text-ink-400 truncate">{{ s.id.slice(0, 12) }} · {{ s.messages_count }} 条 · {{ s.size_bytes }} bytes</div>
+                    <div class="text-[10px] text-ink-400 truncate">{{ s.id.slice(0, 12) }} · {{ s.messages_count }} 条<span v-if="s.tool_calls"> · {{ s.tool_calls }} 工具调用</span> · {{ s.size_bytes }} bytes</div>
                     <div v-if="s.cwd" class="text-[10px] text-ink-400 truncate"><code>{{ s.cwd }}</code></div>
                     <div class="text-[10px] text-ink-400">{{ s.updated_at }}</div>
                   </div>

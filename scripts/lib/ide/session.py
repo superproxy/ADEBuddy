@@ -354,6 +354,221 @@ def scan_generic_sessions(sessions_dir: Path, ide_key: str) -> list[dict]:
     return results
 
 
+def _decode_trae_project_hash(project_hash: str) -> str:
+    """将 Trae CN 的 project_hash 反编码为工作目录路径。
+
+    Trae CN 用 `-` 替换路径分隔符 `/` 作为目录名，例如：
+    `-Users-yangxuezeng-Desktop-MyAgentPlugin` -> `/Users/yangxuezeng/Desktop/MyAgentPlugin`
+
+    注意：目录名本身含 `-` 时会有歧义，此处按 `-` 分割后过滤空段做近似还原。
+    """
+    if project_hash.startswith("-"):
+        project_hash = project_hash[1:]
+    # 按 - 分割，过滤空字符串（连续 --- 产生的空段），用 / 连接
+    parts = [p for p in project_hash.split("-") if p]
+    return "/" + "/".join(parts) if parts else ""
+
+
+def scan_trae_cn_sessions(sessions_dir: Path, ide_key: str = "TraeCN") -> list[dict]:
+    """扫描 Trae CN 会话：sessions_dir = ~/.trae-cn/memory/projects。
+
+    结构：<project_hash>/<YYYYMMDD>/session_memory_<uuid>.jsonl
+    每个 jsonl 文件是一个会话记忆，每行记录：
+    {intent, actions, outcome, learned, message_summary_time, message_id}
+
+    - 会话 ID = 文件名中的 uuid
+    - 标题 = 第一行 intent 字段
+    - 时间 = 第一行 message_summary_time（格式 "2026-07-03 08:51:57"）
+    - cwd = project_hash 反编码
+    """
+    results = []
+    if not sessions_dir.exists():
+        return results
+
+    # 递归扫描：projects/<project_hash>/<date>/session_memory_*.jsonl
+    for jsonl_file in sessions_dir.rglob("session_memory_*.jsonl"):
+        # 提取会话 ID：session_memory_<uuid>.jsonl -> <uuid>
+        session_id = jsonl_file.stem.replace("session_memory_", "")
+        if not session_id:
+            continue
+
+        stat = _safe_stat(jsonl_file)
+
+        # 从路径提取 project_hash 和日期
+        # 路径结构：projects/<project_hash>/<date>/session_memory_xxx.jsonl
+        try:
+            date_dir = jsonl_file.parent
+            project_hash_dir = date_dir.parent
+            project_hash = project_hash_dir.name
+            date_str = date_dir.name  # YYYYMMDD
+        except Exception:
+            project_hash = ""
+            date_str = ""
+
+        cwd = _decode_trae_project_hash(project_hash)
+
+        # 读取第一行提取 intent 和 message_summary_time
+        title = ""
+        updated_at = ""
+        try:
+            with open(jsonl_file, "r", encoding="utf-8", errors="ignore") as f:
+                first_line = f.readline()
+                obj = json.loads(first_line)
+                title = obj.get("intent", "") or ""
+                # message_summary_time 格式："2026-07-03 08:51:57" -> ISO 格式
+                summary_time = obj.get("message_summary_time", "")
+                if summary_time:
+                    try:
+                        # "2026-07-03 08:51:57" -> "2026-07-03T08:51:57"
+                        updated_at = summary_time.replace(" ", "T")
+                    except Exception:
+                        updated_at = summary_time
+        except Exception:
+            pass
+
+        # 如果没有从内容获取到时间，回退到文件 mtime
+        if not updated_at:
+            updated_at = stat.get("updated_at", "")
+
+        results.append({
+            "id": session_id,
+            "ide": ide_key,
+            "title": title[:80] + ("..." if len(title) > 80 else "") if title else f"Session {session_id[:8]}",
+            "cwd": cwd,
+            "created_at": stat.get("created_at", ""),
+            "updated_at": updated_at,
+            "messages_count": _count_jsonl_messages(jsonl_file),
+            "file_path": str(jsonl_file),
+            "size_bytes": stat.get("size_bytes", 0),
+        })
+    return results
+
+
+def _extract_zcode_title_from_jsonl(p: Path, max_chars: int = 80) -> str:
+    """从 ZCode rollout jsonl 提取标题（第一条真实 user 消息内容）。
+
+    ZCode rollout jsonl 每行格式：
+    {completedAt, durationMs, requestId, model, request:{body:{messages:[...]}}, ...}
+
+    跳过 system-reminder、空内容等非真实用户输入。
+    """
+    try:
+        with open(p, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                # request.body.messages 是 OpenAI 格式消息数组
+                messages = (
+                    obj.get("request", {}).get("body", {}).get("messages", [])
+                )
+                if not isinstance(messages, list):
+                    continue
+                for msg in messages:
+                    if not isinstance(msg, dict):
+                        continue
+                    if msg.get("role") != "user":
+                        continue
+                    content = msg.get("content", "")
+                    if isinstance(content, list):
+                        # content 可能是 [{type: "text", text: "..."}]
+                        for item in content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                content = item.get("text", "")
+                                break
+                    if not isinstance(content, str):
+                        continue
+                    # 跳过 system-reminder 包裹的消息和空内容
+                    stripped = content.strip()
+                    if not stripped:
+                        continue
+                    if stripped.startswith("<system-reminder>"):
+                        continue
+                    if stripped.startswith("<command-name>"):
+                        continue
+                    text = stripped.replace("\n", " ")
+                    return text[:max_chars] + ("..." if len(text) > max_chars else "")
+    except Exception:
+        pass
+    return ""
+
+
+def scan_zcode_sessions(sessions_dir: Path, ide_key: str = "ZCode") -> list[dict]:
+    """扫描 ZCode 会话：sessions_dir = ~/.zcode/cli/rollout。
+
+    结构：model-io-sess_<uuid>.jsonl（每行一条模型 I/O 记录）
+    关联目录：~/.zcode/cli/artifacts/sess_<uuid>/（工具调用记录）
+
+    - 会话 ID = sess_<uuid>
+    - 标题 = 第一条 user 消息内容
+    - 时间 = 第一行 completedAt 或文件 mtime
+    - messages_count = jsonl 行数
+    """
+    results = []
+    if not sessions_dir.exists():
+        return results
+
+    # ZCode 配置根目录：rollout 的上两级是 ~/.zcode
+    # rollout -> cli -> .zcode
+    zcode_root = sessions_dir.parent.parent  # ~/.zcode
+    artifacts_dir = zcode_root / "cli" / "artifacts"
+
+    for jsonl_file in sessions_dir.glob("model-io-sess_*.jsonl"):
+        # 提取会话 ID：model-io-sess_<uuid>.jsonl -> sess_<uuid>
+        session_id = jsonl_file.stem  # model-io-sess_<uuid>
+        if not session_id.startswith("model-io-sess_"):
+            continue
+        # 完整会话 ID = sess_<uuid>（去掉 model-io- 前缀）
+        full_session_id = session_id.replace("model-io-", "")
+
+        stat = _safe_stat(jsonl_file)
+
+        # 提取标题和时间
+        title = _extract_zcode_title_from_jsonl(jsonl_file)
+        updated_at = ""
+        created_at = ""
+        try:
+            with open(jsonl_file, "r", encoding="utf-8", errors="ignore") as f:
+                first_line = f.readline()
+                obj = json.loads(first_line)
+                completed_at = obj.get("completedAt", "")
+                if completed_at:
+                    # completedAt 是 ISO-8601 带Z后缀，直接用
+                    updated_at = completed_at
+                    created_at = completed_at
+        except Exception:
+            pass
+
+        if not updated_at:
+            updated_at = stat.get("updated_at", "")
+        if not created_at:
+            created_at = stat.get("created_at", "")
+
+        # 统计工具调用数（artifacts/sess_<uuid>/call_*.json）
+        tool_calls = 0
+        artifact_dir = artifacts_dir / full_session_id
+        if artifact_dir.exists():
+            try:
+                tool_calls = len(list(artifact_dir.glob("call_*.json")))
+            except Exception:
+                pass
+
+        results.append({
+            "id": full_session_id,
+            "ide": ide_key,
+            "title": title or f"Session {full_session_id[-8:]}",
+            "cwd": "",  # ZCode rollout 不直接记录 cwd
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "messages_count": _count_jsonl_messages(jsonl_file),
+            "file_path": str(jsonl_file),
+            "size_bytes": stat.get("size_bytes", 0),
+            "tool_calls": tool_calls,
+        })
+    return results
+
+
 # ===== 调度入口 =====
 
 # IDE key → 扫描器映射
@@ -368,9 +583,9 @@ IDE_SESSION_SCANNERS = {
     "QoderCN": lambda d, k="QoderCN": scan_generic_sessions(d, k),
     "OpenCode": lambda d, k="OpenCode": scan_generic_sessions(d, k),
     "Trae": lambda d, k="Trae": scan_generic_sessions(d, k),
-    "TraeCN": lambda d, k="TraeCN": scan_generic_sessions(d, k),
-    "TraeSoloCN": lambda d, k="TraeSoloCN": scan_generic_sessions(d, k),
-    "ZCode": lambda d, k="ZCode": scan_generic_sessions(d, k),
+    "TraeCN": scan_trae_cn_sessions,
+    "TraeSoloCN": scan_trae_cn_sessions,
+    "ZCode": scan_zcode_sessions,
 }
 
 
