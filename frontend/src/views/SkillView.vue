@@ -15,10 +15,32 @@ onMounted(() => { loadLocalSkills(); loadInstalledSkills() })
     <div class="bg-white rounded-xl shadow-card p-5">
       <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
         <div class="flex items-center gap-1">
+          <button @click="skillTab = 'local'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', skillTab === 'local' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">本地预置</button>
           <button @click="skillTab = 'market'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', skillTab === 'market' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">市场检索</button>
           <button @click="skillTab = 'manual'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', skillTab === 'manual' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">手动安装</button>
         </div>
-        <span class="text-[10px] text-ink-500">{{ skillTab === 'market' ? '从市场搜索并安装技能' : '输入 owner/repo 或 GitHub URL 安装' }}</span>
+        <span class="text-[10px] text-ink-500">{{ skillTab === 'local' ? 'template/skills 本地预置技能' : skillTab === 'market' ? '从市场搜索并安装技能' : '输入 owner/repo 或 GitHub URL 安装' }}</span>
+      </div>
+      <!-- 本地预置技能 tab -->
+      <div v-show="skillTab === 'local'">
+        <div class="flex justify-between items-center mb-3">
+          <span class="text-xs text-ink-600">{{ localSkills.length }} 个本地预置技能（template/skills）</span>
+          <button @click="refreshInstalled" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">刷新</button>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div v-for="s in localSkills" :key="s.skill_name" class="border border-ink-300 rounded-md p-2 hover:border-brand-500 transition">
+            <div class="flex items-center justify-between mb-0.5">
+              <span class="font-medium text-xs truncate">{{ s.skill_name }}</span>
+              <button @click="viewSkillMd(s.skill_name)" class="text-[10px] text-brand-600 hover:underline shrink-0">查看</button>
+            </div>
+            <div class="text-[10px] text-ink-500 line-clamp-2">{{ s.description }}</div>
+            <div class="flex items-center gap-1 mt-1">
+              <span v-if="s.category" class="text-[9px] px-1 py-0.5 bg-brand-50 text-brand-600 rounded">{{ s.category }}</span>
+              <button @click="installFromSearch({ source: 'local', name: s.skill_name, description: s.description, install_command: '' })" class="text-[10px] text-green-600 hover:underline ml-auto">安装</button>
+            </div>
+          </div>
+        </div>
+        <div v-if="!localSkills.length" class="text-center text-ink-500 text-xs py-6">暂无本地预置技能</div>
       </div>
       <div v-show="skillTab === 'market'">
         <div class="flex gap-4 mb-3 items-center">
@@ -55,30 +77,6 @@ onMounted(() => { loadLocalSkills(); loadInstalledSkills() })
         </div>
         <p class="text-[11px] text-ink-500 mt-2">支持 vercel-labs/skills、vercel-labs/skills@find-skills、https://github.com/owner/repo</p>
       </div>
-    </div>
-    <!-- 本地预置技能（template/skills）-->
-    <div class="bg-white rounded-xl shadow-card p-5">
-      <div class="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
-        <h2 class="text-sm font-semibold flex items-center gap-2">
-          <span class="w-1 h-4 bg-brand-500 rounded"></span>本地预置技能
-          <span class="text-[10px] text-ink-500 font-normal">{{ localSkills.length }} 个</span>
-        </h2>
-        <button @click="refreshInstalled" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">刷新</button>
-      </div>
-      <div class="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto">
-        <div v-for="s in localSkills" :key="s.skill_name" class="border border-ink-300 rounded-md p-2 hover:border-brand-500 transition">
-          <div class="flex items-center justify-between mb-0.5">
-            <span class="font-medium text-xs truncate">{{ s.skill_name }}</span>
-            <button @click="viewSkillMd(s.skill_name)" class="text-[10px] text-brand-600 hover:underline shrink-0">查看</button>
-          </div>
-          <div class="text-[10px] text-ink-500 line-clamp-2">{{ s.description }}</div>
-          <div class="flex items-center gap-1 mt-1">
-            <span v-if="s.category" class="text-[9px] px-1 py-0.5 bg-brand-50 text-brand-600 rounded">{{ s.category }}</span>
-            <button @click="installFromSearch({ source: 'local', name: s.skill_name, description: s.description, install_command: '' })" class="text-[10px] text-green-600 hover:underline ml-auto">安装</button>
-          </div>
-        </div>
-      </div>
-      <div v-if="!localSkills.length" class="text-center text-ink-500 text-xs py-6">暂无本地预置技能</div>
     </div>
     <!-- 已安装技能 -->
     <div class="bg-white rounded-xl shadow-card p-5">

@@ -17,7 +17,7 @@ export const useSkillStore = defineStore('skill', () => {
   const sync = useSyncStore()
   const localSkills = ref<any[]>([])
   const skillFilter = reactive({ cat: '', role: '', text: '' })
-  const skillTab = ref('market')
+  const skillTab = ref('local')
   const skillSources = reactive({ modelscope: true, skillssh: false, local: false })
   const skillSearchQ = ref('')
   const skillSearchResults = ref<any[]>([])
