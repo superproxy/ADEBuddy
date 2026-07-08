@@ -6,7 +6,7 @@
 - pywebview 未安装时回退到系统浏览器
 
 用法：
-    python app.py                 # 默认 5000 端口
+    python app.py                 # 默认 5050 端口
     python app.py --port 5050     # 指定端口
 """
 import argparse
@@ -185,7 +185,7 @@ def open_with_pywebview(url: str, title: str = "AgentBuddy 配置工具", width:
 def main():
     parser = argparse.ArgumentParser(description="AgentBuddy 配置工具 (pywebview 桌面版)")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--no-webview", action="store_true", help="不使用 pywebview，回退到系统浏览器")
     parser.add_argument("--run", metavar="SCRIPT", help="frozen 模式下运行 bundled scripts/<name>.py（内部用，不启动窗口）")
     args, extra = parser.parse_known_args()

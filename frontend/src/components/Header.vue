@@ -57,5 +57,6 @@ const emit = defineEmits<{ (e: 'update:tab', v: string): void }>()
         {{ t.label }}
       </button>
     </nav>
+    <SyncBar :tab="tab" />
   </header>
 </template>

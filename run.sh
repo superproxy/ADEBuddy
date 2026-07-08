@@ -3,7 +3,7 @@
 # 用法: ./run.sh [port] [--no-webview]
 
 set -e
-PORT="${1:-5000}"
+PORT="${1:-5050}"
 
 # 切到项目根目录（脚本所在目录）
 cd "$(dirname "$0")"
