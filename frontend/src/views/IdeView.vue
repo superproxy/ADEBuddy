@@ -57,6 +57,8 @@ const {
                   :class="['px-1.5 py-0.5 text-[9px] rounded font-medium cursor-pointer', (ideCardTab[it.key] || 'cli') === 'cli' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200']">CLI</button>
                 <button v-if="ideInstallInfo[it.key]?.app" @click="setIdeCardTab(it.key, 'app')"
                   :class="['px-1.5 py-0.5 text-[9px] rounded font-medium cursor-pointer', (ideCardTab[it.key] || 'cli') === 'app' ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200']">App</button>
+                <button v-if="it.sessions_dir" @click="toggleIdeSessions(it.key)" :disabled="!!ideLoadingSessions"
+                  :class="['px-1.5 py-0.5 text-[9px] rounded font-medium cursor-pointer', 'bg-ink-200 text-ink-700 hover:bg-ink-300']">{{ ideLoadingSessions === it.key ? '...' : (expandedIde === it.key ? '收起' : '会话') }}<span v-if="ideSessionsStatsMap[it.key]" class="text-[9px] text-ink-500">({{ ideSessionsStatsMap[it.key].total }})</span></button>
               </div>
               <div v-if="it.version" class="text-[10px] text-ink-500 truncate leading-tight" :title="it.version">{{ it.version }}</div>
             </div>
@@ -80,7 +82,6 @@ const {
                   <button v-if="it.exe_path" @click="launchIde(it.key)" :disabled="!!ideLaunching || !!ideResuming" class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">{{ ideLaunching === it.key ? '...' : '打开' }}</button>
                   <button v-if="it.config_paths?.length" @click="openIdeConfig(it.key)" :disabled="!!ideOpeningConfig" class="px-2 py-0.5 text-[10px] text-ink-600 bg-ink-100 hover:bg-ink-200 rounded disabled:opacity-40">{{ ideOpeningConfig === it.key ? '...' : '配置目录' }}</button>
                   <button @click="syncIdeConfig(it.key)" :disabled="!!ideSyncing" class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">{{ ideSyncing === it.key ? '...' : '配置同步' }}</button>
-                  <button v-if="it.sessions_dir" @click="toggleIdeSessions(it.key)" :disabled="!!ideLoadingSessions" class="px-2 py-0.5 text-[10px] text-ink-600 hover:bg-ink-200 rounded disabled:opacity-40">{{ ideLoadingSessions === it.key ? '...' : (expandedIde === it.key ? '收起' : '会话') }}<span v-if="ideSessionsStatsMap[it.key]" class="text-[9px] text-ink-400">({{ ideSessionsStatsMap[it.key].total }})</span></button>
                   <a v-if="ideInstallInfo[it.key].homepage" :href="ideInstallInfo[it.key].homepage" target="_blank" class="px-2 py-0.5 text-[10px] text-ink-500 bg-ink-100 hover:bg-ink-200 rounded">官网</a>
                 </div>
               </div>
