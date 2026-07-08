@@ -4,7 +4,7 @@ REM 用法: run.cmd [port] [--no-webview]
 
 setlocal
 set PORT=%1
-if "%PORT%"=="" set PORT=5000
+if "%PORT%"=="" set PORT=5050
 
 cd /d "%~dp0"
 

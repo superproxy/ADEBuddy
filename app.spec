@@ -72,6 +72,7 @@ hiddenimports = [
     'lib.ide', 'lib.ide.base', 'lib.ide.cursor', 'lib.ide.codex',
     'lib.ide.opencode', 'lib.ide.trae', 'lib.ide.claude',
     'lib.ide.workbuddy', 'lib.ide.qoder', 'lib.ide.openclaw',
+    'lib.ide.hermes',
     'lib.ide.idea', 'lib.ide.agents',
 ]
 

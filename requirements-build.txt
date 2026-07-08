@@ -1,0 +1,18 @@
+# 构建期依赖（打包用）
+pyinstaller>=6.0
+
+# 运行时依赖（会被打包进产物）
+flask>=3.0
+pyyaml>=6.0
+requests>=2.30
+pywebview>=6.0
+
+# 前端构建依赖（仅开发/构建时需要，不打包进产物）：
+#   Node.js 18+ / npm
+#   cd frontend && npm install
+#   cd frontend && npm run build-only  (产出 tools/dist-ui/)
+
+# pywebview 平台后端（按平台安装其一，pyinstaller 需将其一并打包）：
+#   macOS : 已含 pyobjc-*（pywebview 在 macOS 自动依赖）
+#   Linux : pip install pywebview[gtk]   (或 [qt])
+#   Windows: 已含（依赖 Edge WebView2 / Pythonnet）
