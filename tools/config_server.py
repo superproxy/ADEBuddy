@@ -106,8 +106,8 @@ MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "template" / "mcp" / "mcp-env-example.yaml"
 MCP_TEMPLATE = PROJECT_ROOT / "template" / "mcp" / "mcp.template.json"
 PLUGINS_DIR = PROJECT_ROOT / "template" / "plugins"
 SKILLS_CSV = PROJECT_ROOT / "template" / "skills" / "skills-index.csv"
-# 技能安装目标：~/.agents/skills/（用户级，下载/插件安装的默认目录）
-AGENTS_SKILLS_INSTALL_DIR = Path.home() / ".agents" / "skills"
+# 技能安装目标：项目根 .agents/skills/（当前目录，非用户主目录）
+AGENTS_SKILLS_INSTALL_DIR = PROJECT_ROOT / ".agents" / "skills"
 # 项目级技能目录：config/skills/（复制的可用技能 + skill.yaml 启用清单）
 PROJECT_SKILLS_DIR = PROJECT_ROOT / "config" / "skills"
 SKILL_YAML = PROJECT_SKILLS_DIR / "skill.yaml"
@@ -151,8 +151,8 @@ def _ensure_config_dirs() -> None:
         PROJECT_ROOT / "config" / "ide" / "opencode",
         PROJECT_ROOT / "config" / "plugins",
         PROJECT_ROOT / "config" / "proxy",
-        # 用户级技能安装目录（~/.agents/skills/，下载/插件安装目标）
-        Path.home() / ".agents" / "skills",
+        # 技能安装目录（项目级 .agents/skills/）
+        PROJECT_ROOT / ".agents" / "skills",
     ]
     for d in config_dirs:
         d.mkdir(parents=True, exist_ok=True)
@@ -558,14 +558,28 @@ def list_local_skills():
 def list_installed_skills():
     enabled_set = get_enabled_skills(SKILL_YAML)
     installed = []
-    # 只扫描当前项目 config/skills/（~/.agents/skills/ 是用户级共享目录，不在此展示）
-    if PROJECT_SKILLS_DIR.exists():
-        for d in PROJECT_SKILLS_DIR.iterdir():
+    seen = set()
+    # 扫描两个项目级技能目录：.agents/skills/（安装目标）+ config/skills/（项目复制）
+    scan_dirs = [
+        DOT_AGENTS_SKILLS,       # .agents/skills/
+        PROJECT_SKILLS_DIR,      # config/skills/
+    ]
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for d in scan_dir.iterdir():
             if not d.is_dir() or not (d / "SKILL.md").exists():
                 continue
+            if d.name in seen:
+                continue
+            seen.add(d.name)
+            try:
+                rel = str(d.relative_to(PROJECT_ROOT))
+            except ValueError:
+                rel = str(d)
             installed.append({
                 "name": d.name,
-                "path": str(d.relative_to(PROJECT_ROOT)),
+                "path": rel,
                 "skill_md_exists": True,
                 "enabled": d.name in enabled_set,
             })

@@ -206,12 +206,11 @@ def cmd_sync(args):
         mcp.refresh_mcp_json(mcp_yaml_file, source_mcp, plugins_dir, installed, flat_config)
 
     # skill 源（三源并集）:
-    #   1. template/skills/  - 内置预置技能（只读）
-    #   2. ~/.agents/skills/  - 用户级安装的技能（下载/插件）
-    #   3. config/skills/     - 项目级复制的技能
-    from pathlib import Path as _Path
+    #   1. template/skills/   - 内置预置技能（只读）
+    #   2. .agents/skills/     - 项目级安装的技能（下载/插件）
+    #   3. config/skills/      - 项目级复制的技能
     source_skills = [PROJECT_ROOT / "template" / "skills"]
-    agents_skills = _Path.home() / ".agents" / "skills"
+    agents_skills = PROJECT_ROOT / ".agents" / "skills"
     if agents_skills.exists():
         source_skills.append(agents_skills)
     project_skills = PROJECT_ROOT / "config" / "skills"
