@@ -27,6 +27,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows CI (cp1252) 无法编码中文，强制 stdout/stderr 用 UTF-8
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 SPEC_FILE = PROJECT_ROOT / "app.spec"
 DIST_DIR = PROJECT_ROOT / "dist"

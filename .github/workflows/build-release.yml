@@ -115,6 +115,8 @@ jobs:
           pip install flask pyyaml requests pywebview pyinstaller
 
       - name: Build app + installer
+        env:
+          PYTHONIOENCODING: utf-8
         run: python build.py --clean --version ${{ steps.ver.outputs.version }}
 
       - name: Upload artifacts
