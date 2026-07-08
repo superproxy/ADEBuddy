@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SyncBar from './SyncBar.vue'
 interface TabItem {
   key: string
   label: string
