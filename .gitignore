@@ -69,3 +69,4 @@ tools/dist-ui/
 # frozen 首次运行标记
 .bundle_bootstrapped
 .zcode/
+# .workbuddy/mcp.json
