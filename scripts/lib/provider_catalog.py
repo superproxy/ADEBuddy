@@ -1,15 +1,161 @@
 """LLM Provider Catalog：从 llm-env-example.yaml 构建预设，并按 key/URL 推断厂商+协议。
 
 对齐 OpenClaw 配置管道思路：
-  Catalog（模板预设）→ Detect（厂商+协议）→ Apply → Verify
+  Catalog（模板预设）→ Detect（Key 指纹 / URL）→（模糊时端点探测）→ Apply → Verify
+
+Key 指纹来源（业界公开格式，2025–2026）：
+  - OpenAI: sk-proj- / sk-svcacct- / sk-admin- / 遗留 sk-
+  - Anthropic: sk-ant-api03- / sk-ant-oat01- / sk-ant-*
+  - OpenRouter: sk-or-v1- / sk-or-
+  - 智谱 BigModel / Z.ai: {32hex}.{16alnum}（无 sk- 前缀）
+  - DashScope: sk- / Coding Plan: sk-sp-
+  - DeepSeek / 火山 / Moonshot: 均为 sk-（需端点探测消歧）
 """
 from __future__ import annotations
 
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from lib.config_io import load_env_config_file
+
+# ---------------------------------------------------------------------------
+# API Key 指纹（按优先级；unique=True 表示可唯一锁定厂商/家族）
+# ---------------------------------------------------------------------------
+KEY_FINGERPRINTS: List[Dict[str, Any]] = [
+    {
+        "id": "anthropic",
+        "pattern": re.compile(r"^sk-ant-(?:api0[13]|oat01|admin01)-[A-Za-z0-9_-]{20,}$", re.I),
+        "providers": ["anthropic"],
+        "protocol": "anthropic",
+        "unique": True,
+        "reason": "Anthropic Key 指纹 sk-ant-api03/oat01",
+    },
+    {
+        "id": "anthropic_loose",
+        "pattern": re.compile(r"^sk-ant-[A-Za-z0-9_-]{8,}$", re.I),
+        "providers": ["anthropic"],
+        "protocol": "anthropic",
+        "unique": True,
+        "reason": "Anthropic Key 前缀 sk-ant-",
+    },
+    {
+        "id": "openrouter",
+        "pattern": re.compile(r"^sk-or-v1-[A-Za-z0-9]+$", re.I),
+        "providers": ["openrouter"],
+        "protocol": "openai",
+        "unique": True,
+        "reason": "OpenRouter Key 指纹 sk-or-v1-",
+    },
+    {
+        "id": "openrouter_loose",
+        "pattern": re.compile(r"^sk-or-[A-Za-z0-9_-]+$", re.I),
+        "providers": ["openrouter"],
+        "protocol": "openai",
+        "unique": True,
+        "reason": "OpenRouter Key 前缀 sk-or-",
+    },
+    {
+        "id": "openai_proj",
+        "pattern": re.compile(r"^sk-proj-[A-Za-z0-9_-]{20,}$", re.I),
+        "providers": ["openai"],
+        "protocol": "openai",
+        "unique": True,
+        "reason": "OpenAI Project Key 指纹 sk-proj-",
+    },
+    {
+        "id": "openai_svcacct",
+        "pattern": re.compile(r"^sk-svcacct-[A-Za-z0-9_-]{20,}$", re.I),
+        "providers": ["openai"],
+        "protocol": "openai",
+        "unique": True,
+        "reason": "OpenAI Service Account Key 指纹 sk-svcacct-",
+    },
+    {
+        "id": "dashscope_coding",
+        "pattern": re.compile(r"^sk-sp-[A-Za-z0-9]+$", re.I),
+        "providers": ["qwen"],
+        "protocol": "openai",
+        "unique": True,
+        "reason": "DashScope Coding Plan Key 指纹 sk-sp-",
+    },
+    {
+        # TruffleHog / 智谱官方：id(32hex).secret(16alnum)
+        "id": "zhipu_zai",
+        "pattern": re.compile(r"^[a-f0-9]{32}\.[A-Za-z0-9]{16}$"),
+        "providers": ["bigmodel", "zai"],  # 同 Key 体系，端点不同 → 探测或让用户选
+        "protocol": "openai",
+        "unique": False,
+        "family": "zhipu",
+        "reason": "智谱/Z.ai Key 指纹 {32hex}.{16alnum}",
+        "probe_providers": ["bigmodel", "zai", "bigmodelCoding", "zaiCoding"],
+    },
+    {
+        # DeepSeek 常见为 sk- + 较长 hex；优先于泛 sk-
+        "id": "deepseek_hex",
+        "pattern": re.compile(r"^sk-[a-f0-9]{32,}$", re.I),
+        "providers": ["deepseek"],
+        "protocol": "openai",
+        "unique": False,
+        "reason": "疑似 DeepSeek Key（sk- + hex）",
+        "probe_providers": ["deepseek", "volcengine", "openai", "moonshot"],
+    },
+    {
+        # OpenAI 遗留 / DeepSeek / 火山 / Moonshot / DashScope 通用 sk-
+        "id": "generic_sk",
+        "pattern": re.compile(r"^sk-[A-Za-z0-9_-]{16,}$", re.I),
+        "providers": [],
+        "protocol": "openai",
+        "unique": False,
+        "reason": "通用 sk- Key，需端点探测消歧",
+        "probe_providers": [
+            "openai", "deepseek", "volcengine", "moonshot", "qwen",
+            "openicu",
+        ],
+    },
+]
+
+# 模糊 Key 探测时使用的默认端点（catalog 无该厂商时跳过）
+PROBE_ENDPOINTS: Dict[str, Dict[str, str]] = {
+    "openai": {"base_url": "https://api.openai.com/v1", "protocol": "openai"},
+    "deepseek": {"base_url": "https://api.deepseek.com", "protocol": "openai"},
+    "volcengine": {"base_url": "https://ark.cn-beijing.volces.com/api/v3", "protocol": "openai"},
+    "volcengineCoding": {"base_url": "https://ark.cn-beijing.volces.com/api/coding/v3", "protocol": "openai"},
+    "volcengineAgent": {"base_url": "https://ark.cn-beijing.volces.com/api/plan/v3", "protocol": "openai"},
+    "moonshot": {"base_url": "https://api.moonshot.ai/v1", "protocol": "openai"},
+    "qwen": {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "protocol": "openai"},
+    "bigmodel": {"base_url": "https://open.bigmodel.cn/api/paas/v4", "protocol": "openai"},
+    "bigmodelCoding": {"base_url": "https://open.bigmodel.cn/api/coding/paas/v4", "protocol": "openai"},
+    "zai": {"base_url": "https://api.z.ai/api/paas/v4", "protocol": "openai"},
+    "zaiCoding": {"base_url": "https://api.z.ai/api/coding/paas/v4", "protocol": "openai"},
+    "openrouter": {"base_url": "https://openrouter.ai/api/v1", "protocol": "openai"},
+    "anthropic": {"base_url": "https://api.anthropic.com/v1", "protocol": "anthropic"},
+    "openicu": {"base_url": "https://rehdasu.cn/v1", "protocol": "openai"},
+}
+
+PROBE_TIMEOUT_SEC = 4.0
+PROBE_MAX_WORKERS = 6
+
+FAMILY_EXPAND_ON_AMBIGUOUS = {
+    "bigmodel": ["bigmodel", "bigmodelCoding"],
+    "zai": ["zai", "zaiCoding"],
+    "volcengine": ["volcengine", "volcengineCoding", "volcengineAgent"],
+    "zhipu": ["bigmodel", "bigmodelCoding", "zai", "zaiCoding"],
+}
+
+
+def classify_api_key(api_key: str) -> Optional[Dict[str, Any]]:
+    """按业界公开 Key 指纹分类。返回命中的 KEY_FINGERPRINTS 条目（拷贝）。"""
+    key = (api_key or "").strip()
+    if not key:
+        return None
+    for fp in KEY_FINGERPRINTS:
+        if fp["pattern"].match(key):
+            return dict(fp)
+    return None
+
 
 # 厂商展示名 / 家族（同家族多端点时弹出候选）
 PROVIDER_META: Dict[str, Dict[str, str]] = {
@@ -150,26 +296,83 @@ DETECT_RULES: List[Dict[str, Any]] = [
     },
 ]
 
-GENERIC_SK_CANDIDATES = [
-    "openai",
-    "openrouter",
-    "deepseek",
-    "bigmodel",
-    "bigmodelCoding",
-    "zai",
-    "zaiCoding",
-    "volcengine",
-    "volcengineCoding",
-    "volcengineAgent",
-    "moonshot",
-    "openicu",
-]
 
-FAMILY_EXPAND_ON_AMBIGUOUS = {
-    "bigmodel": ["bigmodel", "bigmodelCoding"],
-    "zai": ["zai", "zaiCoding"],
-    "volcengine": ["volcengine", "volcengineCoding", "volcengineAgent"],
-}
+def _models_url(base_url: str) -> str:
+    url = (base_url or "").rstrip("/")
+    if url.endswith("/v1/models") or url.endswith("/models"):
+        return url
+    if url.endswith("/v1") or url.endswith("/v3") or url.endswith("/v4"):
+        return url + "/models"
+    # bigmodel/zai paas 路径本身已含版本
+    if "/paas/" in url or "/coding/" in url or "/plan" in url:
+        return url + "/models" if not url.endswith("/models") else url
+    return url + "/v1/models"
+
+
+def probe_endpoint(api_key: str, base_url: str, protocol: str = "openai") -> Dict[str, Any]:
+    """对单个端点做轻量鉴权探测（GET models）。返回 {ok, status, error?}。"""
+    try:
+        import requests as _req
+    except ImportError:
+        return {"ok": False, "status": 0, "error": "requests 未安装"}
+    url = _models_url(base_url)
+    headers = {"Authorization": f"Bearer {api_key}"}
+    if protocol == "anthropic":
+        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+    try:
+        r = _req.get(url, headers=headers, timeout=PROBE_TIMEOUT_SEC)
+        # 200 = 有效；401/403 = 端点对但 key 无效；其它可能是路径不对
+        if r.status_code == 200:
+            return {"ok": True, "status": 200}
+        if r.status_code in (401, 403):
+            return {"ok": False, "status": r.status_code, "error": "auth_failed"}
+        return {"ok": False, "status": r.status_code, "error": f"http_{r.status_code}"}
+    except Exception as e:
+        return {"ok": False, "status": 0, "error": str(e)[:120]}
+
+
+def probe_providers(
+    api_key: str,
+    provider_names: List[str],
+    catalog_map: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> List[Tuple[str, str, int]]:
+    """并行探测多个厂商默认端点。返回 [(provider, protocol, score), ...] 仅 ok 的。"""
+    jobs: List[Tuple[str, str, str]] = []  # provider, base_url, protocol
+    for name in provider_names:
+        # 优先用 catalog 里的默认 URL
+        base_url, protocol = "", "openai"
+        if catalog_map and name in catalog_map:
+            entry = catalog_map[name]
+            protos = entry.get("protocols") or {}
+            suggested = entry.get("suggested_protocol") or ("openai" if "openai" in protos else next(iter(protos), "openai"))
+            cfg = protos.get(suggested) or {}
+            base_url = (cfg.get("base_url") or "").strip()
+            protocol = suggested
+        if not base_url and name in PROBE_ENDPOINTS:
+            base_url = PROBE_ENDPOINTS[name]["base_url"]
+            protocol = PROBE_ENDPOINTS[name]["protocol"]
+        if base_url:
+            jobs.append((name, base_url, protocol))
+
+    results: List[Tuple[str, str, int]] = []
+    if not jobs:
+        return results
+
+    with ThreadPoolExecutor(max_workers=min(PROBE_MAX_WORKERS, len(jobs))) as pool:
+        futures = {
+            pool.submit(probe_endpoint, api_key, bu, proto): (name, proto)
+            for name, bu, proto in jobs
+        }
+        for fut in as_completed(futures):
+            name, proto = futures[fut]
+            try:
+                res = fut.result()
+            except Exception:
+                continue
+            if res.get("ok"):
+                results.append((name, proto, 98))
+    results.sort(key=lambda x: (-x[2], x[0]))
+    return results
 
 
 def _meta(provider: str) -> Dict[str, str]:
@@ -441,14 +644,16 @@ def detect_providers(
     base_url: str = "",
     catalog: Optional[List[Dict[str, Any]]] = None,
     example_path: Optional[Path] = None,
+    *,
+    probe: bool = True,
 ) -> List[Dict[str, Any]]:
     """根据 api_key / base_url 返回候选（含识别出的协议）。
 
     识别顺序：
       1. URL 精确匹配 catalog 协议端点 → 厂商+协议双确定
-      2. URL/Key 规则匹配厂商，再推断协议
-      3. 同家族模糊 → 多候选（各带协议推断）
-      4. 通用 sk- → 多厂商候选
+      2. Key 指纹正则（unique → 直接锁定；家族 → 探测/候选）
+      3. URL 规则匹配厂商
+      4. 模糊 sk- → 并行端点探测消歧；探测失败再给精简候选
     """
     key = (api_key or "").strip()
     url = _norm_url(base_url)
@@ -477,7 +682,22 @@ def detect_providers(
             return
         entry = cmap.get(name)
         if not entry:
-            return
+            # catalog 无此厂商时，用 PROBE_ENDPOINTS 合成最小预设
+            ep = PROBE_ENDPOINTS.get(name)
+            if not ep:
+                return
+            meta = _meta(name)
+            proto = detected_protocol or ep.get("protocol") or "openai"
+            entry = {
+                "provider": name,
+                "label": meta["label"],
+                "family": meta["family"],
+                "protocols": {
+                    proto: {"base_url": ep["base_url"], "models": {}},
+                },
+                "suggested_protocol": proto,
+                "active_protocol": proto,
+            }
         seen.add(name)
         hits.append(_candidate_from_catalog(
             entry,
@@ -489,13 +709,12 @@ def detect_providers(
             api_key=key_l,
         ))
 
-    # 0) URL 精确匹配 catalog 端点（最强：同时锁定厂商+协议）
+    # 0) URL 精确匹配 catalog 端点
     if url:
         endpoint_hits = match_catalog_endpoints(user_url, catalog)
         if endpoint_hits and endpoint_hits[0][2] >= 92:
             top_score = endpoint_hits[0][2]
             exact = [h for h in endpoint_hits if h[2] >= 92 and h[2] >= top_score - 5]
-            # 去重 provider，保留最高分协议
             best_by_provider: Dict[str, Tuple[str, int]] = {}
             for prov, proto, sc in exact:
                 prev = best_by_provider.get(prov)
@@ -512,7 +731,57 @@ def detect_providers(
                 hits.sort(key=lambda c: (-c["score"], c["provider"]))
                 return hits
 
-    # 1) URL 规则匹配厂商
+    # 1) Key 指纹分类（业界公开格式）
+    fp = classify_api_key(key)
+    if fp and fp.get("unique") and fp.get("providers"):
+        for name in fp["providers"]:
+            add_provider(
+                name, 97, fp.get("reason") or f"Key 指纹 {fp.get('id')}",
+                override_url=user_url if user_url else None,
+                detected_protocol=fp.get("protocol") or "",
+                protocol_reason=fp.get("reason") or "",
+            )
+        if hits:
+            hits.sort(key=lambda c: (-c["score"], c["provider"]))
+            return hits
+
+    if fp and not fp.get("unique"):
+        probe_list = list(fp.get("probe_providers") or fp.get("providers") or [])
+        # 智谱/Z.ai：同 Key 体系，优先探测；探测失败再给家族候选
+        if probe and probe_list:
+            probed = probe_providers(key, probe_list, cmap)
+            if probed:
+                for name, proto, sc in probed:
+                    add_provider(
+                        name, sc, f"端点探测成功（{fp.get('reason') or fp.get('id')}）",
+                        override_url=None,
+                        detected_protocol=proto,
+                        protocol_reason="端点探测鉴权通过",
+                    )
+                # 同家族多端点都通时保留全部（如 bigmodel + coding）
+                if hits:
+                    hits.sort(key=lambda c: (-c["score"], c["provider"]))
+                    return hits
+        # 探测无结果：给出家族/指纹候选（不再甩全量 GENERIC 列表）
+        family = fp.get("family")
+        names = list(fp.get("providers") or [])
+        if family and family in FAMILY_EXPAND_ON_AMBIGUOUS:
+            names = FAMILY_EXPAND_ON_AMBIGUOUS[family]
+        elif probe_list:
+            # 模糊 sk-：给精简候选，不把 openrouter/anthropic 等已有专属指纹的混进来
+            names = [n for n in probe_list if n in cmap][:6]
+        for name in names:
+            add_provider(
+                name, 55, fp.get("reason") or "Key 指纹候选",
+                override_url=None,
+                detected_protocol=fp.get("protocol") or "openai",
+                protocol_reason=fp.get("reason") or "",
+            )
+        if hits:
+            hits.sort(key=lambda c: (-c["score"], c["provider"]))
+            return hits
+
+    # 2) URL 规则匹配厂商
     if url:
         for rule in DETECT_RULES:
             if _url_match(url, rule):
@@ -544,8 +813,8 @@ def detect_providers(
                         )
                 break
 
-    # 2) key 前缀
-    if key_l:
+    # 3) 遗留 key_prefixes（兼容旧规则，指纹未覆盖时）
+    if not hits and key_l:
         for rule in DETECT_RULES:
             if not _key_match(key_l, rule):
                 continue
@@ -559,16 +828,11 @@ def detect_providers(
                 else:
                     p_reason = f"规则指定 {rule_proto}"
                 add_provider(
-                    rule["provider"], 95, f"API Key 前缀匹配 {rule['provider']}",
+                    rule["provider"], 90, f"API Key 前缀匹配 {rule['provider']}",
                     override_url=user_url if user_url else None,
                     detected_protocol=rule_proto,
                     protocol_reason=p_reason,
                 )
-
-    # 3) 通用 sk-
-    if not hits and key_l.startswith("sk-") and not key_l.startswith("sk-ant-") and not key_l.startswith("sk-or-"):
-        for name in GENERIC_SK_CANDIDATES:
-            add_provider(name, 50, "通用 sk- key，请选择厂商", override_url=None)
 
     if not hits:
         if key:

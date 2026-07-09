@@ -101,18 +101,37 @@ export const useEnvStore = defineStore('env', () => {
   function updateEnvDataSection(sec: string) {
     try { (envData as any)[sec] = JSON.parse(envDataText[sec] || '{}') } catch { /* ignore */ }
   }
-  function addProvider() {
-    const name = prompt('请输入 Provider 名称')
-    if (!name || !name.trim()) return
+  async function addProvider() {
+    const name = await ui.askPrompt({
+      title: '添加 Provider',
+      message: '写入 llm.yaml 的厂商标识，建议使用小写英文。',
+      label: 'Provider 名称',
+      placeholder: '例如 deepseek / openai / moonshot',
+      confirmText: '添加',
+      mono: true,
+      validate: (v) => {
+        if (!v) return '请输入 Provider 名称'
+        if (envData.llm[v]) return 'Provider 已存在'
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(v)) return '仅支持字母、数字、点、下划线、连字符'
+        return null
+      },
+    })
+    if (!name) return
     const t = name.trim()
-    if (envData.llm[t]) { ui.toast('Provider 已存在', 'warn'); return }
     envData.llm[t] = { openai: { base_url: '', api_key: '', models: {} } }
     if (!envData.llm._active_provider) envData.llm._active_provider = t
     selectProvider(t)
     ui.toast('已添加 Provider: ' + t)
   }
-  function deleteProvider(name: string) {
-    if (!confirm('删除 Provider "' + name + '"？')) return
+  async function deleteProvider(name: string) {
+    const ok = await ui.askConfirm({
+      title: '删除 Provider',
+      message: '删除后不可恢复，相关协议与模型配置会一并移除。',
+      detail: name,
+      confirmText: '删除',
+      tone: 'danger',
+    })
+    if (!ok) return
     delete envData.llm[name]
     if (envData.llm._active_provider === name) envData.llm._active_provider = providerNames.value[0] || ''
     ensureSelectedProvider()
@@ -122,15 +141,37 @@ export const useEnvStore = defineStore('env', () => {
     envData.llm._active_provider = name
     ui.toast('Active 设为: ' + name)
   }
-  function addProtocol(pn: string) {
-    const proto = prompt('协议名称（如 openai/anthropic）')
-    if (!proto || !proto.trim()) return
+  async function addProtocol(pn: string) {
+    const proto = await ui.askPrompt({
+      title: '添加协议',
+      message: `为 ${pn} 新增协议配置块。`,
+      label: '协议名称',
+      placeholder: 'openai 或 anthropic',
+      defaultValue: 'openai',
+      confirmText: '添加',
+      mono: true,
+      validate: (v) => {
+        const t = v.toLowerCase()
+        if (!t) return '请输入协议名称'
+        if (envData.llm[pn]?.[t]) return '协议已存在'
+        if (!/^[a-z][a-z0-9_-]{0,31}$/.test(t)) return '建议使用小写协议名，如 openai / anthropic'
+        return null
+      },
+    })
+    if (!proto) return
     const t = proto.trim().toLowerCase()
-    if (envData.llm[pn][t]) { ui.toast('协议已存在', 'warn'); return }
     envData.llm[pn][t] = { base_url: '', api_key: '', models: {} }
   }
-  function deleteProtocol(pn: string, proto: string) {
-    if (confirm('删除协议 "' + proto + '"？')) delete envData.llm[pn][proto]
+  async function deleteProtocol(pn: string, proto: string) {
+    const ok = await ui.askConfirm({
+      title: '删除协议',
+      message: `将从 ${pn} 中移除该协议及其模型列表。`,
+      detail: proto,
+      confirmText: '删除',
+      tone: 'danger',
+    })
+    if (!ok) return
+    delete envData.llm[pn][proto]
   }
   function addModel(pn: string, proto: string) {
     envData.llm[pn][proto].models = envData.llm[pn][proto].models || {}

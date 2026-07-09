@@ -100,22 +100,63 @@ class ProviderCatalogTests(unittest.TestCase):
         self.assertIn("openai", big["protocols"])
         self.assertTrue(big["protocols"]["openai"]["base_url"])
 
+    def test_fingerprint_openai_proj(self):
+        fp = provider_catalog.classify_api_key("sk-proj-" + "A" * 40)
+        self.assertEqual(fp["id"], "openai_proj")
+        self.assertTrue(fp["unique"])
+
+    def test_fingerprint_anthropic_api03(self):
+        fp = provider_catalog.classify_api_key("sk-ant-api03-" + "A" * 40)
+        self.assertEqual(fp["id"], "anthropic")
+
+    def test_fingerprint_openrouter(self):
+        fp = provider_catalog.classify_api_key("sk-or-v1-" + "abc123def456")
+        self.assertEqual(fp["id"], "openrouter")
+
+    def test_fingerprint_zhipu(self):
+        fp = provider_catalog.classify_api_key("a" * 32 + "." + "B" * 16)
+        self.assertEqual(fp["id"], "zhipu_zai")
+        self.assertFalse(fp["unique"])
+
+    def test_fingerprint_dashscope_coding(self):
+        fp = provider_catalog.classify_api_key("sk-sp-abcdef123456")
+        self.assertEqual(fp["id"], "dashscope_coding")
+
     def test_detect_sk_ant_unique(self):
-        hits = provider_catalog.detect_providers("sk-ant-xxx", catalog=self.catalog)
+        key = "sk-ant-api03-" + "x" * 40
+        hits = provider_catalog.detect_providers(key, catalog=self.catalog, probe=False)
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0]["provider"], "anthropic")
-        self.assertEqual(hits[0]["suggested_protocol"], "anthropic")
+        self.assertEqual(hits[0]["detected_protocol"], "anthropic")
 
     def test_detect_sk_or_unique(self):
-        hits = provider_catalog.detect_providers("sk-or-v1-xxx", catalog=self.catalog)
+        hits = provider_catalog.detect_providers(
+            "sk-or-v1-abcdef123456", catalog=self.catalog, probe=False,
+        )
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0]["provider"], "openrouter")
+
+    def test_detect_sk_proj_unique(self):
+        hits = provider_catalog.detect_providers(
+            "sk-proj-" + "A" * 40, catalog=self.catalog, probe=False,
+        )
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["provider"], "openai")
+
+    def test_detect_zhipu_family_without_probe(self):
+        key = "a" * 32 + "." + "B" * 16
+        hits = provider_catalog.detect_providers(key, catalog=self.catalog, probe=False)
+        names = {h["provider"] for h in hits}
+        self.assertTrue(names & {"bigmodel", "zai", "bigmodelCoding", "zaiCoding"})
+        self.assertNotIn("openai", names)
+        self.assertNotIn("openrouter", names)
 
     def test_detect_bigmodel_coding_url(self):
         hits = provider_catalog.detect_providers(
             "sk-xxx",
             "https://open.bigmodel.cn/api/coding/paas/v4",
             catalog=self.catalog,
+            probe=False,
         )
         self.assertEqual(hits[0]["provider"], "bigmodelCoding")
 
@@ -125,6 +166,7 @@ class ProviderCatalogTests(unittest.TestCase):
             "sk-xxx",
             "https://ark.cn-beijing.volces.com/api/v3",
             catalog=self.catalog,
+            probe=False,
         )
         self.assertEqual(hits[0]["provider"], "volcengine")
         self.assertEqual(hits[0]["detected_protocol"], "openai")
@@ -136,14 +178,21 @@ class ProviderCatalogTests(unittest.TestCase):
             "sk-xxx",
             "https://ark.cn-beijing.volces.com/",
             catalog=self.catalog,
+            probe=False,
         )
         names = [h["provider"] for h in hits]
         self.assertIn("volcengine", names)
         self.assertGreaterEqual(len(hits), 2)
 
-    def test_detect_generic_sk_needs_choice(self):
-        hits = provider_catalog.detect_providers("sk-generic-key", catalog=self.catalog)
-        self.assertGreater(len(hits), 1)
+    def test_detect_generic_sk_limited_candidates(self):
+        """通用 sk- 不再甩全量厂商列表，候选应精简。"""
+        hits = provider_catalog.detect_providers(
+            "sk-generic-key-abcdefgh", catalog=self.catalog, probe=False,
+        )
+        self.assertGreaterEqual(len(hits), 1)
+        self.assertLessEqual(len(hits), 6)
+        names = {h["provider"] for h in hits}
+        self.assertNotIn("anthropic", names)  # 有专属指纹，不应混入
 
     def test_apply_writes_key_and_active(self):
         env = {"llm": {}}
@@ -161,13 +210,15 @@ class ProviderCatalogTests(unittest.TestCase):
             "sk-xxx",
             "https://open.bigmodel.cn/api/anthropic",
             catalog=self.catalog,
+            probe=False,
         )
         self.assertEqual(hits[0]["provider"], "bigmodel")
         self.assertEqual(hits[0]["detected_protocol"], "anthropic")
         self.assertEqual(hits[0]["active_protocol"], "anthropic")
 
     def test_detect_protocol_from_sk_ant(self):
-        hits = provider_catalog.detect_providers("sk-ant-xxx", catalog=self.catalog)
+        key = "sk-ant-api03-" + "y" * 40
+        hits = provider_catalog.detect_providers(key, catalog=self.catalog, probe=False)
         self.assertEqual(hits[0]["detected_protocol"], "anthropic")
 
     def test_detect_protocol_from_openai_path(self):
@@ -175,6 +226,7 @@ class ProviderCatalogTests(unittest.TestCase):
             "sk-xxx",
             "https://open.bigmodel.cn/api/paas/v4",
             catalog=self.catalog,
+            probe=False,
         )
         self.assertEqual(hits[0]["provider"], "bigmodel")
         self.assertEqual(hits[0]["detected_protocol"], "openai")
@@ -184,6 +236,7 @@ class ProviderCatalogTests(unittest.TestCase):
             "sk-xxx",
             "https://api.z.ai/api/coding/paas/v4",
             catalog=self.catalog,
+            probe=False,
         )
         self.assertEqual(hits[0]["provider"], "zaiCoding")
         self.assertEqual(hits[0]["detected_protocol"], "openai")
@@ -198,12 +251,13 @@ class ProviderCatalogTests(unittest.TestCase):
 
     def test_key_only_auto_fills_base_url(self):
         """只输 Key 时，候选应带上 catalog 默认 Base URL。"""
-        hits = provider_catalog.detect_providers("sk-ant-xxx", catalog=self.catalog)
+        key = "sk-ant-api03-" + "z" * 40
+        hits = provider_catalog.detect_providers(key, catalog=self.catalog, probe=False)
         self.assertEqual(hits[0]["provider"], "anthropic")
         url = hits[0]["protocols"]["anthropic"]["base_url"]
         self.assertTrue(url, "catalog 应提供默认 base_url")
         env = {"llm": {}}
-        applied = provider_catalog.apply_provider_to_env(env, hits[0], "sk-ant-xxx")
+        applied = provider_catalog.apply_provider_to_env(env, hits[0], key)
         self.assertEqual(applied["base_url"], url)
         self.assertEqual(env["llm"]["anthropic"]["anthropic"]["base_url"], url)
 

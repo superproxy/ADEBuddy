@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import Header from './components/Header.vue'
 import Toast from './components/Toast.vue'
 import Modal from './components/Modal.vue'
+import AppDialog from './components/AppDialog.vue'
 import LogPanel from './components/LogPanel.vue'
 import IdeView from './views/IdeView.vue'
 import EnvView from './views/EnvView.vue'
@@ -53,5 +54,6 @@ onMounted(() => {
   </main>
   <Toast />
   <Modal />
+  <AppDialog />
   <LogPanel />
 </template>

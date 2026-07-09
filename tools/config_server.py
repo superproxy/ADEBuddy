@@ -91,6 +91,7 @@ from lib.ide.launch import launch_ide, launch_ide_resume_session
 from lib.ide.install import install_ide, uninstall_ide, reinstall_ide, get_install_info, IDE_INSTALL_META
 from lib.provider_catalog import (
     apply_provider_to_env,
+    classify_api_key,
     detect_providers,
     load_provider_catalog,
 )
@@ -460,16 +461,20 @@ def get_llm_catalog():
 def detect_llm_provider():
     """根据 api_key / base_url 推断厂商 + 协议（配置管道 Detect 步）。
 
-    Body: {api_key, base_url?}
+    Body: {api_key, base_url?, probe?: true}
+      probe=true（默认）时，对模糊 sk- / 智谱 Key 并行探测默认端点以消歧。
     返回: {ok, candidates: [{provider, detected_protocol, protocol_reason, ...}], needs_choice}
     """
     body = request.get_json(force=True) or {}
     api_key = (body.get("api_key") or "").strip()
     base_url = (body.get("base_url") or "").strip()
+    probe = body.get("probe", True)
     if not api_key:
         return jsonify({"ok": False, "error": "api_key 必填"}), 400
     try:
-        candidates = detect_providers(api_key, base_url, example_path=LLM_EXAMPLE)
+        candidates = detect_providers(
+            api_key, base_url, example_path=LLM_EXAMPLE, probe=bool(probe),
+        )
         top = candidates[0] if candidates else None
         return jsonify({
             "ok": True,
@@ -479,6 +484,7 @@ def detect_llm_provider():
             "detected_provider": (top or {}).get("provider"),
             "detected_protocol": (top or {}).get("detected_protocol"),
             "protocol_reason": (top or {}).get("protocol_reason"),
+            "fingerprint": (classify_api_key(api_key) or {}).get("id") if api_key else None,
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
