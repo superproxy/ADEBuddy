@@ -89,6 +89,11 @@ from lib.ide.detect import detect_ide, detect_all
 from lib.ide.session import list_sessions, export_session, import_session_to_ide
 from lib.ide.launch import launch_ide, launch_ide_resume_session
 from lib.ide.install import install_ide, uninstall_ide, reinstall_ide, get_install_info, IDE_INSTALL_META
+from lib.provider_catalog import (
+    apply_provider_to_env,
+    detect_providers,
+    load_provider_catalog,
+)
 
 app = Flask(__name__, static_folder=None)
 
@@ -437,6 +442,113 @@ def save_llm():
         path = _ensure_llm_file()
         save_env_config_file(path, data)
         return jsonify({"ok": True, "path": str(path.relative_to(PROJECT_ROOT))})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/llm/catalog", methods=["GET"])
+def get_llm_catalog():
+    """返回 llm-env-example.yaml 中的 Provider Catalog（预设 base_url / models）。"""
+    try:
+        catalog = load_provider_catalog(LLM_EXAMPLE)
+        return jsonify({"ok": True, "catalog": catalog, "count": len(catalog)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/llm/detect", methods=["POST"])
+def detect_llm_provider():
+    """根据 api_key / base_url 推断厂商 + 协议（配置管道 Detect 步）。
+
+    Body: {api_key, base_url?}
+    返回: {ok, candidates: [{provider, detected_protocol, protocol_reason, ...}], needs_choice}
+    """
+    body = request.get_json(force=True) or {}
+    api_key = (body.get("api_key") or "").strip()
+    base_url = (body.get("base_url") or "").strip()
+    if not api_key:
+        return jsonify({"ok": False, "error": "api_key 必填"}), 400
+    try:
+        candidates = detect_providers(api_key, base_url, example_path=LLM_EXAMPLE)
+        top = candidates[0] if candidates else None
+        return jsonify({
+            "ok": True,
+            "candidates": candidates,
+            "needs_choice": len(candidates) > 1,
+            "count": len(candidates),
+            "detected_provider": (top or {}).get("provider"),
+            "detected_protocol": (top or {}).get("detected_protocol"),
+            "protocol_reason": (top or {}).get("protocol_reason"),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/llm/apply", methods=["POST"])
+def apply_llm_provider():
+    """将候选 preset 写入 llm.yaml（配置管道 Apply 步）。
+
+    Body: {
+      api_key,
+      provider,                 # 必填：候选 provider 名
+      protocol?,                # 可选：覆盖识别出的协议
+      base_url?,                # 可选覆盖
+      set_active?: true,
+      candidate?: {...},        # 可选：前端传入的完整候选；缺省则从 catalog 重建
+    }
+    返回: {ok, applied, data}  — data 为更新后的完整 llm.yaml
+    """
+    body = request.get_json(force=True) or {}
+    api_key = (body.get("api_key") or "").strip()
+    provider = (body.get("provider") or "").strip()
+    protocol = (body.get("protocol") or "").strip()
+    base_url = (body.get("base_url") or "").strip()
+    set_active = body.get("set_active", True)
+    if not api_key:
+        return jsonify({"ok": False, "error": "api_key 必填"}), 400
+    if not provider:
+        return jsonify({"ok": False, "error": "provider 必填"}), 400
+    try:
+        candidate = body.get("candidate")
+        if not isinstance(candidate, dict) or candidate.get("provider") != provider:
+            catalog = load_provider_catalog(LLM_EXAMPLE)
+            cmap = {c["provider"]: c for c in catalog}
+            entry = cmap.get(provider)
+            if not entry:
+                return jsonify({"ok": False, "error": f"未知 provider: {provider}"}), 400
+            from lib.provider_catalog import infer_protocol
+            detected, p_reason = infer_protocol(
+                api_key, base_url, entry.get("protocols"),
+            )
+            candidate = {
+                **entry,
+                "score": 100,
+                "reason": "用户选择",
+                "detected_protocol": protocol or detected,
+                "protocol_reason": p_reason,
+                "suggested_protocol": protocol or detected,
+            }
+            if base_url:
+                target = protocol or detected
+                for proto, cfg in (candidate.get("protocols") or {}).items():
+                    if isinstance(cfg, dict) and (proto == target or len(candidate["protocols"]) == 1):
+                        cfg["base_url"] = base_url
+
+        path = _ensure_llm_file()
+        env_data = load_env_config_file(path) or {}
+        applied = apply_provider_to_env(
+            env_data, candidate, api_key,
+            set_active=bool(set_active),
+            base_url_override=base_url,
+            protocol=protocol,
+        )
+        save_env_config_file(path, env_data)
+        return jsonify({
+            "ok": True,
+            "applied": applied,
+            "data": env_data,
+            "path": str(path.relative_to(PROJECT_ROOT)),
+        })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

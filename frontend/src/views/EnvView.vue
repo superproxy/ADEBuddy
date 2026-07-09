@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { useEnvStore } from '../stores/env'
+import SmartProviderPicker from '../components/SmartProviderPicker.vue'
 const env = useEnvStore()
-const { envData, envDataText, openedProviders, providerNames, proxyEnabled } = storeToRefs(env)
+const { envData, envDataText, openedProviders, providerNames, proxyEnabled, smartBusy } = storeToRefs(env)
 const { toggleProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider, addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv, generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider } = env
 </script>
 <template>
   <div class="space-y-4">
+    <SmartProviderPicker />
     <div class="bg-white rounded-xl shadow-card p-5">
       <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
         <h2 class="text-sm font-semibold flex items-center gap-2"><span class="w-1 h-4 bg-brand-500 rounded"></span>LLM Providers <span class="text-[10px] text-ink-500 font-normal">llm.yaml</span></h2>
         <div class="flex gap-2 items-center">
           <button @click="addProvider" class="px-3 py-1.5 text-xs bg-brand-50 text-brand-600 rounded-md hover:bg-brand-100 font-medium">+ 添加 Provider</button>
-          <button @click="addSmartProvider" class="px-3 py-1.5 text-xs bg-green-50 text-green-600 rounded-md hover:bg-green-100 font-medium">智能添加（输 key 自动判断）</button>
+          <button
+            @click="addSmartProvider"
+            :disabled="smartBusy"
+            class="px-3 py-1.5 text-xs bg-green-50 text-green-600 rounded-md hover:bg-green-100 font-medium disabled:opacity-50"
+          >{{ smartBusy ? '管道运行中…' : '智能添加（只输 Key）' }}</button>
           <button @click="saveEnv()" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded-md hover:bg-brand-600 font-medium">保存</button>
         </div>
       </div>
