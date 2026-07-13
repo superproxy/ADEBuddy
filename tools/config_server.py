@@ -3036,8 +3036,9 @@ def sync_subagent():
             """将一个 subagent 写为 <name>.md（frontmatter + body），成功返回 True。
 
             fmt:
-              - "zcode": ZCode/OpenCode 格式（color 字段 + tools 列表）
-              - "trae": Trae 格式（无 color，tools 为逗号分隔字符串）
+              - "zcode": ZCode 格式（name + color + tools 列表）
+              - "opencode": OpenCode 格式（description + mode + permission，无 name/tools 列表）
+              - "trae": Trae 格式（name + tools 逗号分隔字符串，无 color）
             """
             name = sa.get("name", "").strip()
             if not name:
@@ -3048,7 +3049,29 @@ def sync_subagent():
             description = _build_description(sa)
             prompt = sa.get("prompt", "").strip()
 
-            if fmt == "trae":
+            if fmt == "opencode":
+                # OpenCode: 无 name（文件名即名称），无 tools 列表，用 permission
+                # 参考 https://opencode.ai/docs/agents
+                lines = [
+                    "---",
+                    f'description: "{description}"',
+                    "mode: subagent",
+                    "permission:",
+                    "  edit: allow",
+                    "  bash: allow",
+                    "  read: allow",
+                    "  glob: allow",
+                    "  grep: allow",
+                    "  list: allow",
+                    "  webfetch: allow",
+                    "  websearch: allow",
+                    "  todowrite: allow",
+                    "---",
+                    "",
+                    prompt,
+                    "",
+                ]
+            elif fmt == "trae":
                 # Trae: 无 color，tools 为逗号分隔字符串
                 lines = [
                     "---",
@@ -3061,7 +3084,7 @@ def sync_subagent():
                     "",
                 ]
             else:
-                # ZCode/OpenCode: 有 color，tools 为列表
+                # ZCode: 有 color，tools 为列表
                 category = sa.get("category", "").strip()
                 color_map = {"开发": "yellow", "产品": "blue", "通用": "green"}
                 color = color_map.get(category, "yellow")
@@ -3089,9 +3112,9 @@ def sync_subagent():
             (agents_dir / f"{safe_name}.md").write_text("\n".join(lines), encoding="utf-8")
             return True
 
-        # OpenCode: ~/.config/opencode/agents/<name>.md
+        # OpenCode: ~/.config/opencode/agents/<name>.md（OpenCode 专用格式）
         oc_agents_dir = _Path.home() / ".config" / "opencode" / "agents"
-        oc_count = sum(1 for sa in subagents if _write_agent_md(oc_agents_dir, sa, fmt="zcode"))
+        oc_count = sum(1 for sa in subagents if _write_agent_md(oc_agents_dir, sa, fmt="opencode"))
         results["OpenCode"] = oc_count
 
         # ZCode: ~/.zcode/agents/<name>.md
