@@ -323,7 +323,7 @@ def cmd_skill_list(args):
 
 def cmd_skill_enable(args):
     """启用技能（加入 skill.yaml 的 enabled 列表）。"""
-    skill_yaml = PROJECT_ROOT / "template" / "skills" / "skill.yaml"
+    skill_yaml = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
     added = skills.enable_skill(skill_yaml, args.skill_name)
     if added:
         print(f"{COLOR_GREEN}[OK] 已启用技能: {args.skill_name}{COLOR_RESET}")
@@ -333,7 +333,7 @@ def cmd_skill_enable(args):
 
 def cmd_skill_disable(args):
     """禁用技能（从 skill.yaml 的 enabled 列表移除）。"""
-    skill_yaml = PROJECT_ROOT / "template" / "skills" / "skill.yaml"
+    skill_yaml = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
     removed = skills.disable_skill(skill_yaml, args.skill_name)
     if removed:
         print(f"{COLOR_GREEN}[OK] 已禁用技能: {args.skill_name}{COLOR_RESET}")
@@ -343,7 +343,7 @@ def cmd_skill_disable(args):
 
 def cmd_skill_scan(args):
     """扫描本地技能，显示状态。"""
-    skill_yaml = PROJECT_ROOT / "template" / "skills" / "skill.yaml"
+    skill_yaml = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
     all_skills = skills.scan_local_skills(PROJECT_ROOT)
     enabled_set = skills.get_enabled_skills(skill_yaml)
 
