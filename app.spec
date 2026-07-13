@@ -109,10 +109,10 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=(
-        os.path.join(SPECPATH, 'assets', 'app.icns')
-        if os.path.isfile(os.path.join(SPECPATH, 'assets', 'app.icns'))
-        else os.path.join(SPECPATH, 'assets', 'app.ico')
+        os.path.join(SPECPATH, 'assets', 'app.ico')
         if os.path.isfile(os.path.join(SPECPATH, 'assets', 'app.ico'))
+        else os.path.join(SPECPATH, 'assets', 'app.icns')
+        if os.path.isfile(os.path.join(SPECPATH, 'assets', 'app.icns'))
         else None
     ),
 )
