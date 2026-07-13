@@ -2546,6 +2546,7 @@ def sync_cmd():
     - OpenCode: ~/.config/opencode/commands/*.md
     - Claude:   .claude/commands/*.md（项目根）
     - OpenClaw: .openclaw/commands/*.md（项目根）
+    - ZCode:    ~/.zcode/commands/*.md
     """
     import json as _json
     from pathlib import Path as _Path
@@ -2558,6 +2559,7 @@ def sync_cmd():
             ("OpenCode", _Path.home() / ".config" / "opencode" / "commands"),
             ("Claude", PROJECT_ROOT / ".claude" / "commands"),
             ("OpenClaw", PROJECT_ROOT / ".openclaw" / "commands"),
+            ("ZCode", _Path.home() / ".zcode" / "commands"),
         ]
         results = {}
         for ide_name, cmd_dir in targets:
