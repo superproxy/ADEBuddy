@@ -2778,10 +2778,22 @@ def _ensure_subagent_file() -> Path:
 # ============================================================
 # Rules API（config/rules/ + template/rules/ 双目录，.md 文件 + frontmatter）
 # ============================================================
+# 目录名 → 岗位显示名（frontmatter 无 role 时回退）
+_RULE_DIR_ROLE_MAP = {
+    "backend": "后端",
+    "frontend": "前端",
+    "git": "Git",
+    "security": "工程",
+    "testing": "测试",
+    "design": "设计",
+    "product": "产品",
+    "api": "协作",
+}
+
+
 def _parse_rule_frontmatter(content: str) -> dict:
     """解析规则 .md 文件的 frontmatter，返回元信息 dict。"""
-    import re
-    meta = {"description": "", "alwaysApply": False, "globs": "", "scene": ""}
+    meta = {"description": "", "alwaysApply": False, "globs": "", "scene": "", "role": ""}
     if not content.startswith("---"):
         return meta
     parts = content.split("---", 2)
@@ -2795,7 +2807,7 @@ def _parse_rule_frontmatter(content: str) -> dict:
         key, _, val = line.partition(":")
         key = key.strip()
         val = val.strip()
-        if key in ("description", "globs", "scene"):
+        if key in ("description", "globs", "scene", "role"):
             meta[key] = val.strip('"').strip("'")
         elif key == "alwaysApply":
             meta[key] = val.lower() in ("true", "yes", "1")
@@ -2804,7 +2816,6 @@ def _parse_rule_frontmatter(content: str) -> dict:
 
 def _scan_rules_dir(base: Path, source_label: str) -> list:
     """扫描 rules 目录（含子目录），返回规则列表。"""
-    import re
     rules = []
     if not base.exists():
         return rules
@@ -2820,11 +2831,16 @@ def _scan_rules_dir(base: Path, source_label: str) -> list:
         # category = 第一级子目录名（无子目录则为空）
         parts = rel.parts
         category = parts[0] if len(parts) > 1 else ""
+        # 岗位：优先 frontmatter.role，否则用目录映射 / 目录名
+        role = (meta.get("role") or "").strip()
+        if not role and category:
+            role = _RULE_DIR_ROLE_MAP.get(category, category)
         name = f.stem  # 文件名（不含 .md）
         rules.append({
             "name": name,
             "path": str(rel),
             "category": category,
+            "role": role,
             "description": meta["description"],
             "alwaysApply": meta["alwaysApply"],
             "globs": meta["globs"],
