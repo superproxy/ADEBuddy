@@ -63,7 +63,10 @@ IDE_DETECT_META = {
     },
     "Cursor": {
         "label": "Cursor",
-        "cli_names": ["cursor"],
+        # agent 是 Cursor CLI（TUI 交互式 agent，官方命令，见 cursor.com/cn/docs/cli/overview）
+        # cursor 是 GUI 启动器（cursor.CMD → Cursor.exe，非 TUI）
+        "cli_names": ["agent", "cursor"],
+        "cli_tui_names": ["agent"],
         "macos_apps": [
             "/Applications/Cursor.app",
         ],
@@ -78,14 +81,11 @@ IDE_DETECT_META = {
     },
     "Trae": {
         "label": "Trae",
-        "cli_names": ["trae", "trae-cli", "traecli"],
-        # trae 是桌面版 CLI（打开 GUI，非 TUI）；trae-cli/traecli 是 TUI code agent（需 TTY）
-        # 同一 IDE 混合了两种性质的 CLI，用 cli_tui_names 精确标记 TUI 成员
-        "cli_tui_names": ["trae-cli", "traecli"],
+        # Trae 国际版无 CLI（仅有 GUI App）
+        "cli_names": [],
         "macos_apps": ["/Applications/Trae.app"],
         "windows_apps": [
             "{LOCALAPPDATA}/Programs/Trae/Trae.exe",
-            "{LOCALAPPDATA}/trae-cli/bin/trae-cli.exe",
             "{ProgramFiles}/Trae/Trae.exe",
         ],
         "config_dirs": [".trae"],
@@ -94,11 +94,15 @@ IDE_DETECT_META = {
     },
     "TraeCN": {
         "label": "Trae CN",
-        "cli_names": ["trae-cn"],
+        # trae-cn 是桌面版 CLI（打开 GUI，非 TUI）
+        # trae-cli/traecli 是 TUI code agent（独立安装于 ~/.local/bin 或 %LOCALAPPDATA%\trae-cli\bin\）
+        "cli_names": ["trae-cn", "trae-cli", "traecli"],
+        "cli_tui_names": ["trae-cli", "traecli"],
         "macos_apps": ["/Applications/Trae CN.app"],
         "windows_apps": [
             "{LOCALAPPDATA}/Programs/Trae CN/Trae CN.exe",
             "{LOCALAPPDATA}/Programs/Trae CN/Trae.exe",
+            "{LOCALAPPDATA}/trae-cli/bin/trae-cli.exe",
             "{ProgramFiles}/Trae CN/Trae CN.exe",
         ],
         "config_dirs": [".trae-cn", ".traecn"],

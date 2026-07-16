@@ -156,13 +156,37 @@ def _launch_cli_in_terminal(exe_path: str, args: list[str], cwd: str = "",
 
 
 def _launch_macos_app(app_path: str, cwd: str = "") -> dict:
-    """启动 macOS .app（非阻塞）。
+    """启动 GUI App（非阻塞，跨平台）。
+
+    - macOS：用 `open -a <App.app>` 启动 .app
+    - Windows：app_path 为 .exe 路径，直接 Popen 启动
+    - 其他平台：暂不支持
 
     Returns:
         {ok: bool, pid: int, cmd: str, error: str}
     """
+    if sys.platform == "win32":
+        # Windows：app_path 是 GUI exe 路径（如 Cursor.exe）
+        if not app_path or not Path(app_path).exists():
+            return {"ok": False, "pid": 0, "cmd": "", "error": f"app not found: {app_path}"}
+        cmd = [app_path]
+        if cwd:
+            cmd.append(cwd)
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return {"ok": True, "pid": proc.pid,
+                    "cmd": " ".join(f'"{c}"' if " " in c else c for c in cmd), "error": ""}
+        except Exception as e:
+            return {"ok": False, "pid": 0, "cmd": " ".join(cmd), "error": str(e)}
     if sys.platform != "darwin":
         return {"ok": False, "pid": 0, "cmd": "", "error": "not macOS"}
+    # macOS：用 open -a 启动 .app
     if not Path(app_path).exists():
         return {"ok": False, "pid": 0, "cmd": "", "error": f"app not found: {app_path}"}
     # open 命令本身是非阻塞的

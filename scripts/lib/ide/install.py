@@ -24,7 +24,17 @@ from pathlib import Path
 # app_install: 安装 App 的方式（cask/download/manual）与包名/URL
 IDE_INSTALL_META = {
     "Claude": {
-        "cli_install": {"method": "npm", "package": "@anthropic-ai/claude-code", "uninstall_cmd": "npm uninstall -g @anthropic-ai/claude-code 2>/dev/null; rm -f $(which claude) 2>/dev/null; rm -rf /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code ~/.nvm/versions/node/*/lib/node_modules/@anthropic-ai/claude-code"},
+        # 官方推荐 native installation（curl/PowerShell 脚本），自动更新
+        # 见 https://code.claude.com/docs/en/setup#uninstall-claude-code
+        "cli_install": {
+            "method": "script",
+            "script_url": "https://claude.ai/install.sh",
+            "script_url_win": "https://claude.ai/install.ps1",
+            "url": "https://claude.ai/download",
+            # 卸载：覆盖 native（~/.local/bin+share）+ npm + legacy（~/.claude/local）+ 配置（~/.claude+~/.claude.json）
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/claude; rm -rf ~/.local/share/claude ~/.claude/local ~/.claude; rm -f ~/.claude.json; npm uninstall -g @anthropic-ai/claude-code 2>/dev/null; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\claude.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.local\\share\\claude\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.claude\\local\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.claude\" 2>nul & del /q \"%USERPROFILE%\\.claude.json\" 2>nul & npm uninstall -g @anthropic-ai/claude-code 2>nul & exit /b 0",
+        },
         "app_install": {"method": "cask", "package": "claude"},
         "homepage": "https://claude.ai/download",
     },
@@ -34,28 +44,53 @@ IDE_INSTALL_META = {
         "homepage": "https://openai.com/codex",
     },
     "Cursor": {
+        # 官方 CLI 安装脚本（跨平台），命令名为 agent
+        # 见 https://cursor.com/cn/docs/cli/installation
         "cli_install": {
-            "method": "app_cli",
-            "app_path": "/Applications/Cursor.app",
-            "cli_relpath": "Contents/Resources/app/bin/cursor",
-            "link_name": "cursor",
-            "url": "https://cursor.com",
+            "method": "script",
+            "script_url": "https://cursor.com/install",
+            "script_url_win": "https://cursor.com/install?win32=true",
+            "url": "https://cursor.com/cn/docs/cli/installation",
+            # 卸载：删除 native binary（agent）+ 配置目录
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/agent; rm -rf ~/.cursor; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\agent.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.cursor\" 2>nul & exit /b 0",
         },
         "app_install": {"method": "cask", "package": "cursor"},
         "homepage": "https://cursor.com",
     },
     "Trae": {
-        "cli_install": {"method": "manual", "url": "https://www.trae.ai", "uninstall_cmd": "rm -f ~/.local/bin/trae-cli ~/.local/bin/traecli && rm -rf ~/.local/share/trae-cli"},
-        "app_install": {"method": "cask", "package": "trae"},
+        "cli_install": {"method": "manual", "url": "https://www.trae.ai"},
+        "app_install": {
+            "method": "cask",
+            "package": "trae",
+            "uninstall_cmd_mac": "rm -rf '/Applications/Trae.app' ~/.trae 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae\" 2>nul & exit /b 0",
+        },
         "homepage": "https://www.trae.ai",
     },
     "TraeCN": {
-        "cli_install": {"method": "manual", "url": "https://www.trae.cn"},
-        "app_install": {"method": "cask", "package": "trae-cn"},
+        "cli_install": {
+            "method": "powershell_script",
+            "script_url": "https://trae.cn/trae-cli/install.ps1",
+            "url": "https://www.trae.cn",
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/trae-cli ~/.local/bin/traecli && rm -rf ~/.local/share/trae-cli",
+            "uninstall_cmd_win": "powershell -NoProfile -Command \"Remove-Item -Recurse -Force $env:USERPROFILE\\.trae-cli -ErrorAction SilentlyContinue; Remove-Item -Force $env:USERPROFILE\\.local\\bin\\trae-cli.exe -ErrorAction SilentlyContinue; Remove-Item -Force $env:USERPROFILE\\.local\\bin\\traecli.exe -ErrorAction SilentlyContinue\"",
+        },
+        "app_install": {
+            "method": "cask",
+            "package": "trae-cn",
+            "uninstall_cmd_mac": "rm -rf '/Applications/Trae CN.app' ~/.trae-cn ~/.traecn 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.traecn\" 2>nul & exit /b 0",
+        },
         "homepage": "https://www.trae.cn",
     },
     "TraeSoloCN": {
-        "cli_install": {"method": "manual", "url": "https://www.trae.cn"},
+        "cli_install": {
+            "method": "manual",
+            "url": "https://www.trae.cn",
+            "uninstall_cmd_mac": "rm -rf ~/.trae-solo-cn ~/.traesolocn 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%USERPROFILE%\\.trae-solo-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.traesolocn\" 2>nul & exit /b 0",
+        },
         "app_install": {
             "method": "manual",
             "url": "https://www.trae.cn/download",
@@ -238,7 +273,22 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
                     "stdout": "", "stderr": str(e), "url": fallback_url}
 
     if method == "script":
-        # curl -fsSL <script_url> | bash
+        # macOS/Linux: curl -fsSL <script_url> | bash
+        # Windows: irm <script_url_win> | iex（若配了 script_url_win，否则回退 manual）
+        if sys.platform == "win32":
+            script_url_win = install_meta.get("script_url_win", "")
+            if not script_url_win:
+                return {"ok": False, "ide": ide_key, "mode": mode, "method": "manual",
+                        "message": f"需手动安装，请访问: {url or meta.get('homepage', '')}",
+                        "cmd": "", "stdout": "", "stderr": "",
+                        "url": url or meta.get("homepage", "")}
+            shell_cmd = f"irm {script_url_win} | iex"
+            r = _run_cmd(["powershell", "-NoProfile", "-Command", shell_cmd], timeout=600)
+            return {
+                "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "script",
+                "message": "安装成功" if r["ok"] else f"安装失败 (exit={r['returncode']})",
+                "cmd": shell_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+            }
         if not shutil.which("curl"):
             return {"ok": False, "ide": ide_key, "mode": mode, "method": "script",
                     "message": "未安装 curl", "cmd": "", "stdout": "", "stderr": ""}
@@ -249,6 +299,27 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
         r = _run_cmd(["bash", "-c", shell_cmd], timeout=600)
         return {
             "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "script",
+            "message": "安装成功" if r["ok"] else f"安装失败 (exit={r['returncode']})",
+            "cmd": shell_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+        }
+
+    if method == "powershell_script":
+        # Windows PowerShell: irm <script_url> | iex
+        # 非 Windows 平台回退 manual（PowerShell 脚本仅 Windows 适用）
+        if sys.platform != "win32":
+            return {
+                "ok": False, "ide": ide_key, "mode": mode, "method": "manual",
+                "message": f"需手动安装，请访问: {url or meta.get('homepage', '')}",
+                "cmd": "", "stdout": "", "stderr": "",
+                "url": url or meta.get("homepage", ""),
+            }
+        if not script_url:
+            return {"ok": False, "ide": ide_key, "mode": mode, "method": "powershell_script",
+                    "message": "未配置 script_url", "cmd": "", "stdout": "", "stderr": ""}
+        shell_cmd = f"irm {script_url} | iex"
+        r = _run_cmd(["powershell", "-NoProfile", "-Command", shell_cmd], timeout=600)
+        return {
+            "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "powershell_script",
             "message": "安装成功" if r["ok"] else f"安装失败 (exit={r['returncode']})",
             "cmd": shell_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
         }
@@ -368,10 +439,35 @@ def uninstall_ide(ide_key: str, mode: str = "cli") -> dict:
         }
 
     if method == "script":
-        # script 安装方式无标准卸载命令，提示手动卸载
+        # script 安装：按平台选择卸载命令（若配置），否则提示手动卸载
+        uninstall_cmd = _get_uninstall_cmd(install_meta)
+        if uninstall_cmd:
+            r = _run_uninstall_cmd(uninstall_cmd)
+            return {
+                "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "script",
+                "message": "卸载成功" if r["ok"] else f"卸载失败 (exit={r['returncode']})",
+                "cmd": uninstall_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+            }
         return {
             "ok": False, "ide": ide_key, "mode": mode, "method": "script",
             "message": "script 安装方式需手动卸载（请参考官方文档）",
+            "cmd": "", "stdout": "", "stderr": "",
+            "url": meta.get("homepage", ""),
+        }
+
+    if method == "powershell_script":
+        # powershell_script 安装：按平台选择卸载命令（若配置），否则提示手动卸载
+        uninstall_cmd = _get_uninstall_cmd(install_meta)
+        if uninstall_cmd:
+            r = _run_uninstall_cmd(uninstall_cmd)
+            return {
+                "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "powershell_script",
+                "message": "卸载成功" if r["ok"] else f"卸载失败 (exit={r['returncode']})",
+                "cmd": uninstall_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+            }
+        return {
+            "ok": False, "ide": ide_key, "mode": mode, "method": "powershell_script",
+            "message": "powershell_script 安装方式需手动卸载（请参考官方文档）",
             "cmd": "", "stdout": "", "stderr": "",
             "url": meta.get("homepage", ""),
         }
@@ -398,16 +494,26 @@ def uninstall_ide(ide_key: str, mode: str = "cli") -> dict:
                 "message": "未安装 Homebrew 或 brew uninstall 失败", "cmd": "", "stdout": "", "stderr": ""}
 
     if method == "cask":
-        if not shutil.which("brew"):
-            return {"ok": False, "ide": ide_key, "mode": mode, "method": "cask",
-                    "message": "未安装 Homebrew", "cmd": "", "stdout": "", "stderr": ""}
-        cmd = ["brew", "uninstall", "--cask", package]
-        r = _run_cmd(cmd, timeout=300)
-        return {
-            "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "cask",
-            "message": "卸载成功" if r["ok"] else f"卸载失败 (exit={r['returncode']})",
-            "cmd": r["cmd"], "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
-        }
+        if shutil.which("brew"):
+            cmd = ["brew", "uninstall", "--cask", package]
+            r = _run_cmd(cmd, timeout=300)
+            if r["ok"]:
+                return {
+                    "ok": True, "ide": ide_key, "mode": mode, "method": "cask",
+                    "message": "卸载成功", "cmd": r["cmd"],
+                    "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+                }
+        # cask 失败或无 brew（Windows/Linux），fallback uninstall_cmd
+        uninstall_cmd = _get_uninstall_cmd(install_meta)
+        if uninstall_cmd:
+            r = _run_uninstall_cmd(uninstall_cmd)
+            return {
+                "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "cask",
+                "message": "卸载成功" if r["ok"] else f"卸载失败 (exit={r['returncode']})",
+                "cmd": uninstall_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+            }
+        return {"ok": False, "ide": ide_key, "mode": mode, "method": "cask",
+                "message": "未安装 Homebrew 或 brew uninstall 失败", "cmd": "", "stdout": "", "stderr": ""}
 
     if method == "npm":
         if not shutil.which("npm"):
@@ -501,6 +607,10 @@ def get_install_info(ide_key: str) -> dict:
             cli_install = {"method": "manual", "url": homepage}
         if app_install.get("method") == "cask":
             app_install = {"method": "manual", "url": homepage}
+
+    # 非 Windows 平台：powershell_script 降级为 manual（PowerShell 脚本仅 Windows 适用）
+    if sys.platform != "win32" and cli_install.get("method") == "powershell_script":
+        cli_install = {"method": "manual", "url": homepage}
 
     return {
         "ide": ide_key,
