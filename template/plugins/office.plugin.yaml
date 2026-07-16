@@ -9,6 +9,12 @@ mcpServers:
     command: open-computer-use
     args:
       - mcp
+  open-browser-use:
+    command: obu
+    args:
+      - 'mcp'
+    name: open_browser_use
+    disabled: false
 skills:
   - name: find-skills
     source: vercel-labs/skills

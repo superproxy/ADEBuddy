@@ -3523,13 +3523,18 @@ def terminal_start():
                         "url": f"http://127.0.0.1:{TTYD_PORT}"})
     ttyd = shutil.which("ttyd")
     if not ttyd:
-        hint = "brew install ttyd" if sys.platform == "darwin" else "scoop install ttyd"
+        hint = "brew install ttyd" if sys.platform == "darwin" else "winget install ttyd"
         return jsonify({"ok": False,
                         "error": f"未安装 ttyd，请执行: {hint}"}), 400
+    # 选择 ttyd 启动的 shell：Windows 用 cmd.exe，其他平台用 bash
+    if sys.platform == "win32":
+        shell_cmd = ["cmd.exe"]
+    else:
+        shell_cmd = ["bash"]
     try:
         _ttyd_proc = subprocess.Popen(
             [ttyd, "--port", str(TTYD_PORT), "--writable",
-             "--interface", "127.0.0.1", "bash"],
+             "--interface", "127.0.0.1"] + shell_cmd,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         # 等待启动
