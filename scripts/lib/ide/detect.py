@@ -393,10 +393,12 @@ def _normalize_id(s: str) -> str:
 
 
 def _scan_registry_uninstall() -> list[dict]:
-    """扫描 Windows 卸载注册表，返回 [{name, icon, location, version}] 列表（带缓存）。
+    """扫描 Windows 卸载注册表，返回 [{name, icon, location, version, uninstall_cmd, quiet_uninstall_cmd}] 列表（带缓存）。
 
     覆盖 HKLM 64/32 位和 HKCU 三个根，能识别 user-scope 安装的 IDE。
     version 来自 DisplayVersion 字段，用于 GUI 应用版本号展示（不调用 CLI）。
+    uninstall_cmd / quiet_uninstall_cmd 来自 UninstallString / QuietUninstallString，
+    用于系统级卸载（调用产品自带卸载程序）。
     """
     global _REGISTRY_CACHE
     if _REGISTRY_CACHE is not None:
@@ -439,12 +441,24 @@ def _scan_registry_uninstall() -> list[dict]:
                                 version = winreg.QueryValueEx(sk, "DisplayVersion")[0]
                             except FileNotFoundError:
                                 pass
+                            uninstall_cmd = ""
+                            try:
+                                uninstall_cmd = winreg.QueryValueEx(sk, "UninstallString")[0]
+                            except FileNotFoundError:
+                                pass
+                            quiet_uninstall_cmd = ""
+                            try:
+                                quiet_uninstall_cmd = winreg.QueryValueEx(sk, "QuietUninstallString")[0]
+                            except FileNotFoundError:
+                                pass
                             if name:
                                 entries.append({
                                     "name": str(name),
                                     "icon": str(icon).split(",")[0].strip('"').strip(),
                                     "location": str(location).strip('"').strip(),
                                     "version": str(version).strip(),
+                                    "uninstall_cmd": str(uninstall_cmd).strip('"').strip(),
+                                    "quiet_uninstall_cmd": str(quiet_uninstall_cmd).strip('"').strip(),
                                 })
                     except FileNotFoundError:
                         continue
@@ -613,6 +627,39 @@ def _lookup_version_from_registry(label: str) -> str:
     return ""
 
 
+def lookup_windows_uninstall_cmd(label: str) -> str:
+    """通过 label 反查注册表中的卸载命令（QuietUninstallString 优先，UninstallString 次之）。
+
+    用于系统级卸载：调用产品自带的卸载程序（如 unins000.exe / MsiExec /I{...}），
+    比手动删目录更干净（会清理注册表项、PATH、关联文件等）。
+
+    Args:
+        label: IDE 标识（如 "Cursor" "Trae CN"），用 _normalize_id 规范化后匹配
+
+    Returns:
+        卸载命令字符串。未找到返回空串。
+    """
+    if sys.platform != "win32" or not label:
+        return ""
+    norm_label = _normalize_id(label)
+    if not norm_label:
+        return ""
+    # 优先精确匹配，其次包含匹配
+    exact = []
+    partial = []
+    for entry in _scan_registry_uninstall():
+        norm_name = _normalize_id(entry["name"])
+        if norm_label == norm_name:
+            exact.append(entry)
+        elif norm_label in norm_name:
+            partial.append(entry)
+    for entry in exact + partial:
+        cmd = entry.get("quiet_uninstall_cmd", "") or entry.get("uninstall_cmd", "")
+        if cmd:
+            return cmd
+    return ""
+
+
 def _get_cli_version(exe_path: str) -> str:
     """尝试获取 CLI 版本（--version），失败返回空字符串。
 
@@ -777,4 +824,4 @@ def is_installed(ide_key: str) -> bool:
     return detect_ide(ide_key)["installed"]
 
 
-__all__ = ["IDE_DETECT_META", "detect_ide", "detect_all", "is_installed"]
+__all__ = ["IDE_DETECT_META", "detect_ide", "detect_all", "is_installed", "lookup_windows_uninstall_cmd"]

@@ -35,12 +35,22 @@ IDE_INSTALL_META = {
             "uninstall_cmd_mac": "rm -f ~/.local/bin/claude; rm -rf ~/.local/share/claude ~/.claude/local ~/.claude; rm -f ~/.claude.json; npm uninstall -g @anthropic-ai/claude-code 2>/dev/null; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\claude.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.local\\share\\claude\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.claude\\local\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.claude\" 2>nul & del /q \"%USERPROFILE%\\.claude.json\" 2>nul & npm uninstall -g @anthropic-ai/claude-code 2>nul & exit /b 0",
         },
-        "app_install": {"method": "cask", "package": "claude"},
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://claude.ai/download",
+            "uninstall_cmd_mac": "rm -rf '/Applications/Claude.app' ~/.claude 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\claude\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.claude\" 2>nul & exit /b 0",
+        },
         "homepage": "https://claude.ai/download",
     },
     "Codex": {
         "cli_install": {"method": "npm", "package": "@openai/codex", "uninstall_cmd": "npm uninstall -g @openai/codex 2>/dev/null; rm -f $(which codex) 2>/dev/null; rm -rf /opt/homebrew/lib/node_modules/@openai/codex ~/.nvm/versions/node/*/lib/node_modules/@openai/codex"},
-        "app_install": {"method": "manual", "url": "https://openai.com/codex/download"},
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://openai.com/codex/download",
+            "uninstall_cmd_mac": "rm -rf '/Applications/Codex.app' ~/.codex 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\codex\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.codex\" 2>nul & exit /b 0",
+        },
         "homepage": "https://openai.com/codex",
     },
     "Cursor": {
@@ -55,14 +65,19 @@ IDE_INSTALL_META = {
             "uninstall_cmd_mac": "rm -f ~/.local/bin/agent; rm -rf ~/.cursor; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\agent.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.cursor\" 2>nul & exit /b 0",
         },
-        "app_install": {"method": "cask", "package": "cursor"},
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://cursor.com",
+            "uninstall_cmd_mac": "rm -rf '/Applications/Cursor.app' ~/.cursor 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\cursor\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.cursor\" 2>nul & exit /b 0",
+        },
         "homepage": "https://cursor.com",
     },
     "Trae": {
         "cli_install": {"method": "manual", "url": "https://www.trae.ai"},
         "app_install": {
-            "method": "cask",
-            "package": "trae",
+            "method": "system_uninstall",
+            "url": "https://www.trae.ai",
             "uninstall_cmd_mac": "rm -rf '/Applications/Trae.app' ~/.trae 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae\" 2>nul & exit /b 0",
         },
@@ -77,8 +92,8 @@ IDE_INSTALL_META = {
             "uninstall_cmd_win": "powershell -NoProfile -Command \"Remove-Item -Recurse -Force $env:USERPROFILE\\.trae-cli -ErrorAction SilentlyContinue; Remove-Item -Force $env:USERPROFILE\\.local\\bin\\trae-cli.exe -ErrorAction SilentlyContinue; Remove-Item -Force $env:USERPROFILE\\.local\\bin\\traecli.exe -ErrorAction SilentlyContinue\"",
         },
         "app_install": {
-            "method": "cask",
-            "package": "trae-cn",
+            "method": "system_uninstall",
+            "url": "https://www.trae.cn",
             "uninstall_cmd_mac": "rm -rf '/Applications/Trae CN.app' ~/.trae-cn ~/.traecn 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.traecn\" 2>nul & exit /b 0",
         },
@@ -92,7 +107,7 @@ IDE_INSTALL_META = {
             "uninstall_cmd_win": "rmdir /s /q \"%USERPROFILE%\\.trae-solo-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.traesolocn\" 2>nul & exit /b 0",
         },
         "app_install": {
-            "method": "manual",
+            "method": "system_uninstall",
             "url": "https://www.trae.cn/download",
             "uninstall_cmd_mac": "rm -rf '/Applications/Trae Solo CN.app' ~/.trae-solo-cn ~/.traesolocn 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae Solo CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae-solo-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.traesolocn\" 2>nul & exit /b 0",
@@ -101,22 +116,52 @@ IDE_INSTALL_META = {
     },
     "OpenCode": {
         "cli_install": {"method": "brew", "package": "opencode", "uninstall_cmd": "rm -f $(which opencode) 2>/dev/null; rm -rf ~/.config/opencode"},
-        "app_install": {"method": "manual", "url": "https://opencode.ai/downloads"},
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://opencode.ai/downloads",
+            "uninstall_cmd_mac": "rm -rf '/Applications/OpenCode.app' ~/.config/opencode ~/.opencode 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\opencode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.opencode\" 2>nul & exit /b 0",
+        },
         "homepage": "https://opencode.ai",
     },
     "Qoder": {
-        "cli_install": {"method": "script", "script_url": "https://qoder.com/install"},
-        "app_install": {"method": "cask", "package": "qoder"},
+        "cli_install": {
+            "method": "script",
+            "script_url": "https://qoder.com/install",
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/qoder; rm -rf ~/.qoder; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\qoder.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder\" 2>nul & exit /b 0",
+        },
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://qoder.com/zh/cli",
+            "uninstall_cmd_mac": "rm -rf '/Applications/Qoder.app' ~/.qoder 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Qoder\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder\" 2>nul & exit /b 0",
+        },
         "homepage": "https://qoder.com/zh/cli",
     },
     "QoderCN": {
-        "cli_install": {"method": "script", "script_url": "https://qoder.com.cn/install"},
-        "app_install": {"method": "manual", "url": "https://qoder.com.cn/download"},
+        "cli_install": {
+            "method": "script",
+            "script_url": "https://qoder.com.cn/install",
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/qoder-cn; rm -rf ~/.qoder-cn ~/.qodercn; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\qoder-cn.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0",
+        },
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://qoder.com.cn/download",
+            "uninstall_cmd_mac": "rm -rf '/Applications/Qoder CN.app' ~/.qoder-cn ~/.qodercn 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Qoder CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0",
+        },
         "homepage": "https://qoder.com.cn/cli",
     },
     "OpenClaw": {
         "cli_install": {"method": "npm", "package": "openclaw", "uninstall_cmd": "npm uninstall -g openclaw 2>/dev/null; rm -f $(which openclaw) 2>/dev/null; rm -rf ~/.local/share/openclaw"},
-        "app_install": {"method": "cask", "package": "openclaw"},
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://github.com/openclaw/openclaw",
+            "uninstall_cmd_mac": "rm -rf '/Applications/OpenClaw.app' ~/.openclaw 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\openclaw\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.openclaw\" 2>nul & exit /b 0",
+        },
         "homepage": "https://github.com/openclaw/openclaw",
     },
     "Hermes": {
@@ -127,7 +172,7 @@ IDE_INSTALL_META = {
     "WorkBuddy": {
         "cli_install": {"method": "manual", "url": "https://github.com/workbuddy/workbuddy/releases"},
         "app_install": {
-            "method": "manual",
+            "method": "system_uninstall",
             "url": "https://github.com/workbuddy/workbuddy/releases",
             "uninstall_cmd_mac": "rm -rf /Applications/WorkBuddy.app ~/.workbuddy 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\WorkBuddy\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.workbuddy\" 2>nul & exit /b 0",
@@ -135,13 +180,28 @@ IDE_INSTALL_META = {
         "homepage": "https://github.com/workbuddy/workbuddy",
     },
     "ZCode": {
-        "cli_install": {"method": "manual", "url": "https://zcode.z.ai/cn"},
-        "app_install": {"method": "manual", "url": "https://zcode.z.ai/cn/download"},
+        "cli_install": {
+            "method": "manual",
+            "url": "https://zcode.z.ai/cn",
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/zcode; rm -rf ~/.zcode; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\zcode.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.zcode\" 2>nul & exit /b 0",
+        },
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://zcode.z.ai/cn/download",
+            "uninstall_cmd_mac": "rm -rf '/Applications/ZCode.app' ~/.zcode 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\ZCode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.zcode\" 2>nul & exit /b 0",
+        },
         "homepage": "https://zcode.z.ai/cn",
     },
     "IDEA": {
         "cli_install": {"method": "manual", "url": "https://www.jetbrains.com/idea"},
-        "app_install": {"method": "cask", "package": "intellij-idea-ce"},
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://www.jetbrains.com/idea",
+            "uninstall_cmd_mac": "rm -rf '/Applications/IntelliJ IDEA.app' '/Applications/IntelliJ IDEA CE.app' ~/.idea ~/.jetbrains 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\JetBrains\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.idea\" 2>nul & exit /b 0",
+        },
         "homepage": "https://www.jetbrains.com/idea",
     },
     "Agents": {
@@ -397,6 +457,60 @@ def _run_uninstall_cmd(cmd: str) -> dict:
     return _run_cmd(["bash", "-c", cmd], timeout=120)
 
 
+def _do_windows_system_uninstall(ide_key: str, mode: str) -> dict | None:
+    """Windows 系统级卸载：从注册表查 UninstallString 并执行产品自带卸载程序。
+
+    Returns:
+        卸载结果 dict，未找到卸载命令返回 None（由调用方回退）。
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        from .detect import lookup_windows_uninstall_cmd, IDE_DETECT_META
+    except Exception:
+        return None
+    # 用 IDE label 反查注册表卸载命令
+    label = IDE_DETECT_META.get(ide_key, {}).get("label", ide_key)
+    sys_cmd = lookup_windows_uninstall_cmd(label)
+    if not sys_cmd:
+        return None
+    r = _run_uninstall_cmd(sys_cmd)
+    return {
+        "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "system_uninstall",
+        "message": "已调用系统卸载程序" if r["ok"] else f"系统卸载失败 (exit={r['returncode']})",
+        "cmd": sys_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+    }
+
+
+def _do_system_uninstall(ide_key: str, mode: str, install_meta: dict, meta: dict) -> dict:
+    """系统级卸载（跨平台）。
+
+    - Windows：优先注册表 UninstallString（产品自带卸载程序），回退 uninstall_cmd
+    - macOS：删 .app 目录 + uninstall_cmd
+    - Linux：回退 uninstall_cmd
+    """
+    # Windows：优先系统卸载程序
+    if sys.platform == "win32":
+        sys_result = _do_windows_system_uninstall(ide_key, mode)
+        if sys_result:
+            return sys_result
+    # 回退：配置的 uninstall_cmd
+    uninstall_cmd = _get_uninstall_cmd(install_meta)
+    if uninstall_cmd:
+        r = _run_uninstall_cmd(uninstall_cmd)
+        return {
+            "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "system_uninstall",
+            "message": "卸载成功" if r["ok"] else f"卸载失败 (exit={r['returncode']})",
+            "cmd": uninstall_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+        }
+    return {
+        "ok": False, "ide": ide_key, "mode": mode, "method": "system_uninstall",
+        "message": "未找到系统卸载程序，需手动卸载",
+        "cmd": "", "stdout": "", "stderr": "",
+        "url": meta.get("homepage", ""),
+    }
+
+
 def uninstall_ide(ide_key: str, mode: str = "cli") -> dict:
     """卸载 IDE。
 
@@ -423,6 +537,11 @@ def uninstall_ide(ide_key: str, mode: str = "cli") -> dict:
     method = install_meta.get("method", "manual")
     package = install_meta.get("package", "")
 
+    if method == "system_uninstall":
+        # 系统级卸载：Windows 优先调注册表 UninstallString（产品自带卸载程序），
+        # macOS 删 .app，回退到 uninstall_cmd
+        return _do_system_uninstall(ide_key, mode, install_meta, meta)
+
     if method == "manual":
         # manual 但配了 uninstall_cmd：按平台选择卸载命令
         uninstall_cmd = _get_uninstall_cmd(install_meta)
@@ -433,6 +552,11 @@ def uninstall_ide(ide_key: str, mode: str = "cli") -> dict:
                 "message": "卸载成功" if r["ok"] else f"卸载失败 (exit={r['returncode']})",
                 "cmd": uninstall_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
             }
+        # manual 无 uninstall_cmd：Windows 下尝试系统卸载（注册表 UninstallString）
+        if sys.platform == "win32":
+            sys_result = _do_windows_system_uninstall(ide_key, mode)
+            if sys_result:
+                return sys_result
         return {
             "ok": False, "ide": ide_key, "mode": mode, "method": "manual",
             "message": "需手动卸载", "cmd": "", "stdout": "", "stderr": "",
