@@ -1,16 +1,16 @@
-name: computer-use
+name: open-browser-use
 version: 1.0.0
 description: 电脑操作插件 - 提供浏览器自动化和桌面操作能力
 author: AdeBuddy
 scripts:
   install: npm i -g open-browser-use && open-browser-use setup
 mcpServers:
-  playwright:
-    command: npx
+  open-browser-use:
+    command: obu
     args:
-      - '@playwright/mcp@latest'
-    name: playwright
-    disabled: true
+      - 'mcp'
+    name: open_browser_use
+    disabled: false
 skills:
   - name: open-browser-use
     source: iFurySt/open-browser-use
