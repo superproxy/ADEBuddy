@@ -274,7 +274,11 @@ IDE_INSTALL_META = {
     },
     "OpenCode": {
         # OpenCode（开源 AI 编码代理，anomalyco 维护）
-        # 来源：https://opencode.ai/docs/
+        # 来源：https://opencode.ai/docs/  (截至 2026-07-19)
+        # 官方推荐 curl -fsSL https://opencode.ai/install | bash（仅 macOS/Linux）
+        # Windows 官方无 PowerShell 脚本（/install.ps1 返回 404），使用 Chocolatey/Scoop/NPM
+        # Homebrew 推荐 tap：anomalyco/tap/opencode（更新及时），brew install opencode 是官方 formula（更新慢）
+        # 无独立 Desktop App 下载页（/downloads 返回 404），App 安装走 GitHub Releases
         "label": "OpenCode",
         "version": "latest",
         "release_date": "2026-07-19",
@@ -282,29 +286,34 @@ IDE_INSTALL_META = {
         "docs_url": "https://opencode.ai/docs/",
         "release_url": "https://github.com/anomalyco/opencode/releases",
         "cli_install": {
-            # 官方推荐 install script（跨平台，含 Windows PowerShell）
+            # 官方推荐 install script（仅 macOS/Linux，Windows 会自动降级 manual）
             "method": "script",
             "script_url": "https://opencode.ai/install",
-            "script_url_win": "https://opencode.ai/install.ps1",
             "url": "https://opencode.ai/docs/",
-            "package": "opencode-ai",  # npm 备选
+            "package": "opencode-ai",  # npm 备选：npm install -g opencode-ai
             "uninstall_cmd_mac": "rm -f ~/.local/bin/opencode; rm -rf ~/.config/opencode ~/.local/share/opencode; npm uninstall -g opencode-ai 2>/dev/null; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\opencode.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.config\\opencode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.local\\share\\opencode\" 2>nul & npm uninstall -g opencode-ai 2>nul & exit /b 0",
         },
         "app_install": {
-            "method": "system_uninstall",
-            "url": "https://opencode.ai/downloads",
-            "uninstall_cmd_mac": "rm -rf '/Applications/OpenCode.app' ~/.config/opencode ~/.opencode 2>/dev/null; true",
-            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\opencode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.opencode\" 2>nul & exit /b 0",
+            # OpenCode 无独立 Desktop App 下载页，走 GitHub Releases 手动下载二进制
+            "method": "manual",
+            "url": "https://github.com/anomalyco/opencode/releases/latest",
+            "uninstall_cmd_mac": "rm -rf '/Applications/OpenCode.app' ~/.config/opencode ~/.local/share/opencode 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\opencode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.config\\opencode\" 2>nul & exit /b 0",
         },
         "download_urls": {
             "macos_arm64": "https://github.com/anomalyco/opencode/releases/latest",
             "macos_x64": "https://github.com/anomalyco/opencode/releases/latest",
             "windows_x64": "https://github.com/anomalyco/opencode/releases/latest",
+            "windows_arm64": "https://github.com/anomalyco/opencode/releases/latest",
             "linux_x64": "https://github.com/anomalyco/opencode/releases/latest",
             "linux_arm64": "https://github.com/anomalyco/opencode/releases/latest",
         },
-        "install_methods": ["script", "npm", "brew", "choco", "scoop"],
+        # 官方支持的安装方式（按平台分组）：
+        #  - macOS/Linux: script / npm / brew (tap) / mise / docker / arch (pacman/paru)
+        #  - Windows: choco / scoop / npm / mise / docker
+        #  - 跨平台: bun / pnpm / yarn（基于 npm 包 opencode-ai）
+        "install_methods": ["script", "npm", "brew", "choco", "scoop", "mise", "docker", "arch", "bun", "pnpm", "yarn"],
     },
     "Qoder": {
         # Qoder 国际版（阿里云通义灵码升级版）
