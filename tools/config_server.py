@@ -701,8 +701,35 @@ def _ensure_keys_file() -> Path:
     return KEYS_FILE
 
 
+def _normalize_key_entry(raw) -> dict:
+    """规范化单个密钥条目为 {value, description}。
+
+    兼容三种输入：
+      - 字符串 "xxx" → {"value": "xxx", "description": ""}
+      - dict {"value": "...", "description": "..."} → 原样
+      - dict 缺字段 → 补默认值
+      - 其他类型 → {"value": str(raw), "description": ""}
+    """
+    if isinstance(raw, dict):
+        v = raw.get("value", "")
+        d = raw.get("description", "")
+        if not isinstance(v, str):
+            v = "" if v is None else str(v)
+        if not isinstance(d, str):
+            d = "" if d is None else str(d)
+        return {"value": v, "description": d}
+    if isinstance(raw, str):
+        return {"value": raw, "description": ""}
+    if raw is None:
+        return {"value": "", "description": ""}
+    return {"value": str(raw), "description": ""}
+
+
 def _load_keys_full() -> dict:
-    """加载 keys.yaml 全量数据。返回 {"mcp": {...}}。"""
+    """加载 keys.yaml 全量数据。返回 {"mcp": {KEY: {value, description}}}。
+
+    规范化后所有条目都是 {value, description} 对象，前端无需关心原始格式。
+    """
     path = _ensure_keys_file()
     try:
         data = load_env_config_file(path) or {}
@@ -710,14 +737,25 @@ def _load_keys_full() -> dict:
         data = {}
     if not isinstance(data, dict):
         data = {}
-    if "mcp" not in data or not isinstance(data.get("mcp"), dict):
+    if not isinstance(data.get("mcp"), dict):
         data["mcp"] = {}
+    # 规范化每一条
+    data["mcp"] = {k: _normalize_key_entry(v) for k, v in data["mcp"].items()}
     return data
 
 
 def _save_keys_full(data: dict) -> None:
-    """保存 keys.yaml 全量数据。"""
+    """保存 keys.yaml 全量数据。
+
+    存储格式：所有条目统一存为 {value, description} 对象。
+    """
     path = _ensure_keys_file()
+    if not isinstance(data, dict):
+        data = {}
+    if not isinstance(data.get("mcp"), dict):
+        data["mcp"] = {}
+    # 规范化后再存
+    data["mcp"] = {k: _normalize_key_entry(v) for k, v in data["mcp"].items()}
     save_env_config_file(path, data)
 
 
@@ -754,7 +792,7 @@ def save_keys():
 
 @app.route("/api/keys/key", methods=["POST"])
 def add_key():
-    """添加单个密钥条目。Body: {key, value=''}"""
+    """添加单个密钥条目。Body: {key, value='', description=''}"""
     body = request.get_json(force=True)
     key = (body.get("key") or "").strip()
     if not key:
@@ -763,9 +801,35 @@ def add_key():
         return jsonify({"ok": False, "error": "仅支持字母、数字、下划线，且不能以数字开头"}), 400
     try:
         full = _load_keys_full()
-        full["mcp"][key] = body.get("value", "")
+        if key in full["mcp"]:
+            return jsonify({"ok": False, "error": f"变量已存在: {key}"}), 409
+        full["mcp"][key] = {
+            "value": body.get("value", "") or "",
+            "description": body.get("description", "") or "",
+        }
         _save_keys_full(full)
         return jsonify({"ok": True, "key": key})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/keys/key/<key>", methods=["PATCH"])
+def update_key(key):
+    """更新单个密钥条目的 value 和/或 description。Body: {value?, description?}"""
+    body = request.get_json(force=True) or {}
+    try:
+        full = _load_keys_full()
+        if key not in full["mcp"]:
+            return jsonify({"ok": False, "error": f"未找到 key: {key}"}), 404
+        entry = full["mcp"][key]
+        if "value" in body:
+            v = body["value"]
+            entry["value"] = "" if v is None else (str(v) if not isinstance(v, str) else v)
+        if "description" in body:
+            d = body["description"]
+            entry["description"] = "" if d is None else (str(d) if not isinstance(d, str) else d)
+        _save_keys_full(full)
+        return jsonify({"ok": True, "key": key, "entry": entry})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

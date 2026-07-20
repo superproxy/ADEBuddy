@@ -75,7 +75,15 @@ def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
                 keys_data = load_env_config_file(keys_file) or {}
                 keys_mcp = keys_data.get("mcp", {}) or {}
                 if isinstance(keys_mcp, dict):
-                    merged_mcp_keys.update(keys_mcp)
+                    # keys.yaml 的 mcp 段支持两种格式：
+                    #   - 旧：KEY: value_string
+                    #   - 新：KEY: {value: "...", description: "..."}
+                    # 合并到 flat_config 时统一抽取 value 字段（保留字符串形式）
+                    for k, v in keys_mcp.items():
+                        if isinstance(v, dict) and "value" in v:
+                            merged_mcp_keys[k] = v.get("value", "")
+                        else:
+                            merged_mcp_keys[k] = v
             except Exception:
                 pass
         merged = {}
