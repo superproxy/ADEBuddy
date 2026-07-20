@@ -759,15 +759,131 @@ def _save_keys_full(data: dict) -> None:
     save_env_config_file(path, data)
 
 
+def _compute_key_usages() -> dict:
+    """扫描 mcp.yaml 和 llm.yaml，反查每个变量名的引用出处。
+
+    返回：{KEY: [{source: "mcp.yaml", scope: "服务名/Redis", field: "env.REDIS_URL"}, ...]}
+
+    匹配规则：
+      1. ${KEY} 或 ${KEY:-default} 占位符（任何字段值中）
+      2. mcp.yaml 中 env 段的 key 名直接匹配（明文配置也算引用）
+      3. llm.yaml 中字段名匹配（api_key/base_url 等）暂不识别明文（太宽泛）
+    """
+    usages: dict = {}
+    placeholder_re = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^\}]*)?\}")
+
+    # 1) 扫描 mcp.yaml
+    try:
+        mcp_path = MCP_CONFIG_FILE
+        if mcp_path.exists():
+            mcp_data = load_env_config_file(mcp_path) or {}
+            servers = mcp_data.get("mcpServers", {}) if isinstance(mcp_data, dict) else {}
+            for srv_name, srv_cfg in servers.items():
+                if not isinstance(srv_cfg, dict):
+                    continue
+                # env 段：key 名匹配 / 值中的占位符
+                env_seg = srv_cfg.get("env")
+                if isinstance(env_seg, dict):
+                    for env_k, env_v in env_seg.items():
+                        # 明文：env 段的 key 名直接是变量名
+                        if env_k in usages:
+                            pass  # 已存在
+                        usages.setdefault(env_k, []).append({
+                            "source": "mcp.yaml",
+                            "scope": str(srv_name),
+                            "field": f"env.{env_k}",
+                            "kind": "plaintext",
+                        })
+                        # 占位符：值中引用
+                        if isinstance(env_v, str):
+                            for m in placeholder_re.finditer(env_v):
+                                var = m.group(1)
+                                usages.setdefault(var, []).append({
+                                    "source": "mcp.yaml",
+                                    "scope": str(srv_name),
+                                    "field": f"env.{env_k}",
+                                    "kind": "placeholder",
+                                })
+                # headers 段：值中的占位符
+                headers_seg = srv_cfg.get("headers")
+                if isinstance(headers_seg, dict):
+                    for h_k, h_v in headers_seg.items():
+                        if isinstance(h_v, str):
+                            for m in placeholder_re.finditer(h_v):
+                                var = m.group(1)
+                                usages.setdefault(var, []).append({
+                                    "source": "mcp.yaml",
+                                    "scope": str(srv_name),
+                                    "field": f"headers.{h_k}",
+                                    "kind": "placeholder",
+                                })
+                # args / url / command 等字符串字段：占位符
+                for field_name in ("url", "command"):
+                    fv = srv_cfg.get(field_name)
+                    if isinstance(fv, str):
+                        for m in placeholder_re.finditer(fv):
+                            var = m.group(1)
+                            usages.setdefault(var, []).append({
+                                "source": "mcp.yaml",
+                                "scope": str(srv_name),
+                                "field": field_name,
+                                "kind": "placeholder",
+                            })
+                args_seg = srv_cfg.get("args")
+                if isinstance(args_seg, list):
+                    for i, av in enumerate(args_seg):
+                        if isinstance(av, str):
+                            for m in placeholder_re.finditer(av):
+                                var = m.group(1)
+                                usages.setdefault(var, []).append({
+                                    "source": "mcp.yaml",
+                                    "scope": str(srv_name),
+                                    "field": f"args[{i}]",
+                                    "kind": "placeholder",
+                                })
+    except Exception:
+        pass
+
+    # 2) 扫描 llm.yaml（仅识别 ${KEY} 占位符，避免误报明文）
+    try:
+        llm_path = LLM_FILE
+        if llm_path.exists():
+            llm_data = load_env_config_file(llm_path) or {}
+            if isinstance(llm_data, dict):
+                def _walk(obj, path_str):
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            _walk(v, f"{path_str}.{k}" if path_str else str(k))
+                    elif isinstance(obj, list):
+                        for i, v in enumerate(obj):
+                            _walk(v, f"{path_str}[{i}]")
+                    elif isinstance(obj, str):
+                        for m in placeholder_re.finditer(obj):
+                            var = m.group(1)
+                            usages.setdefault(var, []).append({
+                                "source": "llm.yaml",
+                                "scope": path_str.split(".")[0] if path_str else "",
+                                "field": path_str,
+                                "kind": "placeholder",
+                            })
+                _walk(llm_data, "")
+    except Exception:
+        pass
+
+    return usages
+
+
 @app.route("/api/keys", methods=["GET"])
 def get_keys():
-    """返回 keys.yaml 全量数据。"""
+    """返回 keys.yaml 全量数据 + 每个变量的引用出处。"""
     path = _ensure_keys_file()
     try:
         full = _load_keys_full()
+        usages = _compute_key_usages()
         return jsonify({
             "ok": True,
             "data": {"mcp": full.get("mcp", {})},
+            "usages": usages,
             "path": str(path.relative_to(PROJECT_ROOT)),
         })
     except Exception as e:

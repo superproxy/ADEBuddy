@@ -10,6 +10,8 @@ export const useKeysStore = defineStore('keys', () => {
   const loaded = ref(false)
   const listQuery = ref('')
   const selectedKey = ref<string>('')
+  // 变量引用出处：{KEY: [{source, scope, field, kind}, ...]}
+  const usages = ref<{ [k: string]: Array<{ source: string; scope: string; field: string; kind: string }> }>({})
   // 新建行草稿（不进 keysData.mcp，直到提交）
   const draft = reactive<{ key: string; value: string; description: string; error: string }>({
     key: '',
@@ -61,11 +63,12 @@ export const useKeysStore = defineStore('keys', () => {
     if (r.ok) {
       // 清空再赋值（保持响应式）
       Object.keys(keysData.mcp).forEach((k) => delete keysData.mcp[k])
-      const data = r.data?.data?.mcp || {}
+      const data = r.data?.mcp || {}
       Object.keys(data).forEach((k) => {
         keysData.mcp[k] = normalizeEntry(data[k])
       })
-      keysPath.value = r.data?.path || ''
+      usages.value = r.usages || {}
+      keysPath.value = r.path || ''
       loaded.value = true
     } else {
       ui.toast('加载密钥失败: ' + r.error, 'err')
@@ -187,6 +190,7 @@ export const useKeysStore = defineStore('keys', () => {
     selectedEntry,
     draft,
     isAdding,
+    usages,
     keyEntries,
     keyCount,
     loadKeys,

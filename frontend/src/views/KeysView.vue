@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref, nextTick } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useKeysStore } from '../stores/keys'
 import { useUiStore } from '../stores/ui'
 
 const ui = useUiStore()
 const keys = useKeysStore() as any
-const { keysData, keysPath, keyEntries, keyCount, listQuery, selectedKey, selectedEntry, draft, isAdding } = keys
+// 响应式 state 必须用 storeToRefs 解构，否则丢失响应式
+const { keysPath, keyEntries, keyCount, listQuery, draft, isAdding, usages } = storeToRefs(keys)
 
-const newValueInput = ref<HTMLInputElement | null>(null)
 const newKeyInput = ref<HTMLInputElement | null>(null)
+const newValueInput = ref<HTMLInputElement | null>(null)
+const newDescInput = ref<HTMLInputElement | null>(null)
+// 行内可见性状态：key -> boolean（局部 UI 状态，不入 store）
+const revealedRows = ref<{ [k: string]: boolean }>({})
 
 onMounted(() => {
   keys.loadKeys()
@@ -23,16 +28,15 @@ async function handleAdd() {
 async function handleCommitAdd() {
   const ok = await keys.commitAdd()
   if (ok) {
-    newValueInput.value?.focus()
+    // 添加成功后自动展开下一个 + 行，方便连续添加
+    keys.startAdd()
+    await nextTick()
+    newKeyInput.value?.focus()
   }
 }
 
 function handleCancelAdd() {
   keys.cancelAdd()
-}
-
-function handleSaveAll() {
-  keys.saveKeys()
 }
 
 function handleDelete(key: string) {
@@ -44,21 +48,11 @@ function onValueInput(key: string, e: Event) {
 }
 
 function onDescriptionInput(key: string, e: Event) {
-  keys.updateDescription(key, (e.target as HTMLTextAreaElement).value)
+  keys.updateDescription(key, (e.target as HTMLInputElement).value)
 }
 
-function onRowClick(key: string) {
-  keys.selectKey(key)
-}
-
-function reveal(e: Event) {
-  const input = e.target as HTMLInputElement
-  input.type = input.type === 'password' ? 'text' : 'password'
-}
-
-function revealById(id: string) {
-  const el = document.getElementById(id) as HTMLInputElement | null
-  if (el) el.type = el.type === 'password' ? 'text' : 'password'
+function toggleReveal(key: string) {
+  revealedRows.value[key] = !revealedRows.value[key]
 }
 
 function copyValue(value: string) {
@@ -71,19 +65,71 @@ function copyValue(value: string) {
 function onNewKeyEnter(e: KeyboardEvent) {
   if (e.key === 'Enter') {
     e.preventDefault()
-    newValueInput.value?.focus()
+    // 变量名已输入 → 直接创建（值/描述留空，可在行内继续编辑）
+    if (draft.value.key.trim()) {
+      handleCommitAdd()
+    } else {
+      newValueInput.value?.focus()
+    }
   } else if (e.key === 'Escape') {
     handleCancelAdd()
   }
 }
 
+// 变量名失焦：若为空则取消，否则保留草稿（不自动提交，用户可继续填值/描述）
+function onNewKeyBlur() {
+  setTimeout(() => {
+    // 检查焦点是否已转到其他新建输入框
+    const active = document.activeElement
+    if (
+      active !== newKeyInput.value &&
+      active !== newValueInput.value &&
+      active !== newDescInput.value
+    ) {
+      // 焦点离开了新建行：若变量名为空则取消，否则尝试提交
+      if (!draft.value.key.trim()) {
+        handleCancelAdd()
+      }
+    }
+  }, 100)
+}
+
 function onNewValueEnter(e: KeyboardEvent) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    newDescInput.value?.focus()
+  } else if (e.key === 'Escape') {
+    handleCancelAdd()
+  }
+}
+
+function onNewDescEnter(e: KeyboardEvent) {
   if (e.key === 'Enter') {
     e.preventDefault()
     handleCommitAdd()
   } else if (e.key === 'Escape') {
     handleCancelAdd()
   }
+}
+
+/** 获取变量引用出处列表 */
+function getUsages(key: string): Array<{source: string; scope: string; field: string; kind: string}> {
+  return usages.value[key] || []
+}
+
+/** 出处摘要：拼接为 "mcp.yaml: Redis, Tavily" 格式 */
+function usagesSummary(key: string): string {
+  const list = getUsages(key)
+  if (!list.length) return ''
+  // 按 source 分组，scope 去重
+  const bySource: { [k: string]: Set<string> } = {}
+  list.forEach((u) => {
+    if (!bySource[u.source]) bySource[u.source] = new Set()
+    bySource[u.source].add(u.scope)
+  })
+  return Object.entries(bySource)
+    .map(([src, scopes]) => `${src}: ${[...scopes].join(', ')}`)
+    .join(' | ')
 }
 </script>
 
@@ -97,16 +143,6 @@ function onNewValueEnter(e: KeyboardEvent) {
           <code v-pre>${KEY}</code> 占位符的 fallback。
           <span class="text-ink-400">优先取 OS 环境变量，其次取此处，最后用 <code v-pre>${VAR:-default}</code> 默认值。</span>
         </p>
-      </div>
-      <div class="actions">
-        <button type="button" class="btn btn-soft" @click="handleAdd" :disabled="isAdding">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          快速添加
-        </button>
-        <button type="button" class="btn btn-primary" @click="handleSaveAll">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-          全量保存
-        </button>
       </div>
     </header>
 
@@ -127,65 +163,80 @@ function onNewValueEnter(e: KeyboardEvent) {
         aria-label="搜索"
       />
       <code v-if="keysPath" class="path-hint">{{ keysPath }}</code>
+      <span class="auto-save-hint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+        自动保存
+      </span>
     </div>
 
-    <div class="split-layout">
-      <!-- 左侧：表格列表 -->
-      <section class="keys-list-pane">
-        <!-- 内联新建行（顶部插入） -->
-        <div v-if="isAdding" class="key-row draft-row">
-          <input
-            ref="newKeyInput"
-            v-model="draft.key"
-            type="text"
-            class="key-name-input"
-            placeholder="变量名（如 TAVILY_API_KEY）"
-            @keydown="onNewKeyEnter"
-          />
-          <input
-            ref="newValueInput"
-            v-model="draft.value"
-            type="password"
-            class="value-input"
-            placeholder="值（如 sk-xxx）"
-            @keydown="onNewValueEnter"
-          />
-          <button type="button" class="btn btn-primary btn-sm" @click="handleCommitAdd">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
-            确认
-          </button>
-          <button type="button" class="btn btn-ghost btn-sm" @click="handleCancelAdd">取消</button>
-        </div>
-        <div v-if="isAdding && draft.error" class="draft-error">{{ draft.error }}</div>
-
-        <!-- 已有变量列表 -->
-        <div class="keys-list">
-          <div
-            v-for="entry in keyEntries"
-            :key="entry.key"
-            class="key-row"
-            :class="{ selected: selectedKey === entry.key }"
-            @click="onRowClick(entry.key)"
-          >
-            <code class="key-name" :title="entry.key">{{ entry.key }}</code>
-            <input
-              :value="entry.value"
-              @input="onValueInput(entry.key, $event)"
-              @click.stop
-              type="password"
-              class="value-input"
-              placeholder="请输入值（如 sk-xxx）"
-            />
-            <span class="desc-preview" :title="entry.description">{{ entry.description || '—' }}</span>
-            <div class="row-actions" @click.stop>
+    <!-- Excel 风格表格：变量名 / 值 / 描述 / 出处 / 操作 -->
+    <div class="table-wrap">
+      <table class="keys-table">
+        <colgroup>
+          <col class="col-name" />
+          <col class="col-value" />
+          <col class="col-desc" />
+          <col class="col-usage" />
+          <col class="col-actions" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>变量名</th>
+            <th>值</th>
+            <th>描述</th>
+            <th>出处</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="entry in keyEntries" :key="entry.key" class="data-row">
+            <td class="cell-name">
+              <code class="key-name" :title="entry.key">{{ entry.key }}</code>
+              <span v-if="!entry.value" class="badge badge-warn">未设值</span>
+            </td>
+            <td class="cell-value">
+              <input
+                :value="entry.value"
+                @input="onValueInput(entry.key, $event)"
+                :type="revealedRows[entry.key] ? 'text' : 'password'"
+                class="value-input"
+                placeholder="请输入值（如 sk-xxx）"
+              />
+            </td>
+            <td class="cell-desc">
+              <input
+                :value="entry.description"
+                @input="onDescriptionInput(entry.key, $event)"
+                type="text"
+                class="desc-input"
+                placeholder="该变量的用途、获取方式…"
+              />
+            </td>
+            <td class="cell-usage">
+              <span v-if="getUsages(entry.key).length" class="usage-list" :title="usagesSummary(entry.key)">
+                <span
+                  v-for="(u, idx) in getUsages(entry.key).slice(0, 3)"
+                  :key="idx"
+                  class="usage-chip"
+                  :class="'kind-' + u.kind"
+                >
+                  <span class="usage-source">{{ u.source === 'mcp.yaml' ? 'MCP' : 'LLM' }}</span>
+                  <span class="usage-scope">{{ u.scope }}</span>
+                </span>
+                <span v-if="getUsages(entry.key).length > 3" class="usage-more">+{{ getUsages(entry.key).length - 3 }}</span>
+              </span>
+              <span v-else class="usage-empty" title="未被任何配置引用">未使用</span>
+            </td>
+            <td class="cell-actions">
               <button
                 type="button"
                 class="btn btn-icon btn-ghost btn-sm"
-                aria-label="显示/隐藏"
-                title="显示/隐藏"
-                @click="reveal"
+                :aria-label="(revealedRows[entry.key] ? '隐藏' : '显示') + '值'"
+                :title="(revealedRows[entry.key] ? '隐藏' : '显示') + '值'"
+                @click="toggleReveal(entry.key)"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-if="revealedRows[entry.key]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-8-10-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
               <button
                 type="button"
@@ -200,92 +251,74 @@ function onNewValueEnter(e: KeyboardEvent) {
                 type="button"
                 class="btn btn-danger btn-icon btn-sm"
                 :aria-label="'删除 ' + entry.key"
+                :title="'删除 ' + entry.key"
                 @click="handleDelete(entry.key)"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
               </button>
-            </div>
-          </div>
-          <div v-if="!keyCount && !isAdding" class="m-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3"/></svg>
-            <p>暂无变量，点击右上方「快速添加」开始。</p>
-          </div>
-        </div>
-      </section>
+            </td>
+          </tr>
 
-      <!-- 右侧：详情侧栏 -->
-      <aside class="detail-pane">
-        <div v-if="selectedEntry" class="detail-card">
-          <header class="detail-head">
-            <code class="detail-title">{{ selectedEntry.key }}</code>
-            <span v-if="!selectedEntry.value" class="badge badge-warn">未设值</span>
-            <span v-else class="badge badge-ok">已设值</span>
-          </header>
+          <!-- 永久 + 行：点击进入新建模式 -->
+          <tr v-if="!isAdding" class="add-row" @click="handleAdd" tabindex="0" @keydown.enter.prevent="handleAdd">
+            <td colspan="5" class="add-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              <span>添加变量…</span>
+            </td>
+          </tr>
 
-          <div class="detail-field">
-            <label class="field-label">描述</label>
-            <textarea
-              :value="selectedEntry.description"
-              @input="onDescriptionInput(selectedEntry.key, $event)"
-              class="desc-textarea"
-              rows="3"
-              placeholder="该变量的用途、获取方式、注意事项…"
-            ></textarea>
-          </div>
-
-          <div class="detail-field">
-            <label class="field-label">值</label>
-            <div class="value-row">
+          <!-- 新建行（底部 + 行点击后展开） -->
+          <tr v-if="isAdding" class="draft-row">
+            <td class="cell-name">
               <input
-                :id="'detail-value-' + selectedEntry.key"
-                :value="selectedEntry.value"
-                @input="onValueInput(selectedEntry.key, $event)"
+                ref="newKeyInput"
+                v-model="draft.key"
+                type="text"
+                class="key-name-input"
+                placeholder="变量名（如 TAVILY_API_KEY）"
+                @keydown="onNewKeyEnter"
+                @blur="onNewKeyBlur"
+              />
+            </td>
+            <td class="cell-value">
+              <input
+                ref="newValueInput"
+                v-model="draft.value"
                 type="password"
                 class="value-input"
-                placeholder="请输入值"
+                placeholder="值（如 sk-xxx）"
+                @keydown="onNewValueEnter"
               />
-              <button
-                type="button"
-                class="btn btn-icon btn-ghost btn-sm"
-                aria-label="显示/隐藏"
-                title="显示/隐藏"
-                @click="revealById('detail-value-' + selectedEntry.key)"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
-              <button
-                type="button"
-                class="btn btn-icon btn-ghost btn-sm"
-                aria-label="复制值"
-                title="复制值"
-                @click="copyValue(selectedEntry.value)"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              </button>
-            </div>
-            <p class="hint">变更会自动保存到 <code>{{ keysPath || 'keys.yaml' }}</code></p>
-          </div>
+            </td>
+            <td class="cell-desc">
+              <input
+                ref="newDescInput"
+                v-model="draft.description"
+                type="text"
+                class="desc-input"
+                placeholder="描述（可选）"
+                @keydown="onNewDescEnter"
+              />
+            </td>
+            <td class="cell-usage">
+              <span class="usage-empty">新变量</span>
+            </td>
+            <td class="cell-actions">
+              <span class="draft-hint">Enter 创建 · Esc 取消</span>
+            </td>
+          </tr>
+          <tr v-if="isAdding && draft.error">
+            <td colspan="5" class="draft-error">{{ draft.error }}</td>
+          </tr>
 
-          <div class="detail-meta">
-            <div class="meta-row"><span>变量名</span><code>{{ selectedEntry.key }}</code></div>
-            <div class="meta-row"><span>引用方式</span><code>{{ '${' + selectedEntry.key + '}' }}</code></div>
-            <div class="meta-row"><span>带默认值</span><code>{{ '${' + selectedEntry.key + ':-default}' }}</code></div>
-          </div>
-
-          <div class="detail-danger">
-            <button type="button" class="btn btn-danger btn-sm" @click="handleDelete(selectedEntry.key)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-              删除此变量
-            </button>
-          </div>
-        </div>
-
-        <div v-else class="detail-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>
-          <p>点击左侧任意变量查看详情</p>
-          <p class="hint">可在右侧编辑描述、复制值、查看引用方式</p>
-        </div>
-      </aside>
+          <tr v-if="!keyCount && !isAdding">
+            <td colspan="5" class="m-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3"/></svg>
+              <p>暂无变量，点击上方「+ 添加变量…」开始。</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>
@@ -321,18 +354,6 @@ function onNewValueEnter(e: KeyboardEvent) {
   font-size: 11px;
   color: var(--brand-600, #2563eb);
   border: 1px solid var(--border-base);
-}
-.actions {
-  display: flex;
-  gap: 8px;
-}
-.actions svg {
-  width: 14px;
-  height: 14px;
-}
-.actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .kpi-row {
@@ -396,76 +417,90 @@ function onNewValueEnter(e: KeyboardEvent) {
   border-radius: 4px;
   border: 1px solid var(--border-base);
 }
-
-.split-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-@media (max-width: 960px) {
-  .split-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-.keys-list-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.draft-row {
-  background: rgba(59, 130, 246, 0.06) !important;
-  border-color: var(--brand-500, #3b82f6) !important;
-  border-style: dashed;
-}
-.draft-error {
-  color: #ef4444;
-  font-size: 12px;
-  margin-top: -4px;
-  padding-left: 12px;
-}
-
-.keys-list {
-  display: grid;
-  gap: 6px;
-}
-.key-row {
-  display: grid;
-  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) minmax(0, 0.8fr) auto;
-  gap: 8px;
+.auto-save-hint {
+  display: inline-flex;
   align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+.auto-save-hint svg {
+  width: 12px;
+  height: 12px;
+  color: #10b981;
+}
+
+/* 表格容器 */
+.table-wrap {
   background: var(--bg-elevated);
   border: 1px solid var(--border-base);
   border-radius: 10px;
+  overflow: hidden;
+}
+.keys-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+.keys-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary);
+  background: var(--bg-base);
   padding: 8px 12px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  border-bottom: 1px solid var(--border-base);
 }
-.key-row:hover {
-  border-color: var(--brand-500, #3b82f6);
+.col-name { width: 18%; }
+.col-value { width: 28%; }
+.col-desc { width: 24%; }
+.col-usage { width: 20%; }
+.col-actions { width: 10%; }
+
+.keys-table tbody tr {
+  border-bottom: 1px solid var(--border-base);
+  transition: background 0.12s;
 }
-.key-row.selected {
-  border-color: var(--brand-500, #3b82f6);
-  background: rgba(59, 130, 246, 0.06);
-  box-shadow: 0 0 0 1px var(--brand-500, #3b82f6) inset;
+.keys-table tbody tr:last-child {
+  border-bottom: none;
+}
+.keys-table tbody tr.data-row:hover {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.keys-table td {
+  padding: 6px 12px;
+  vertical-align: middle;
+}
+
+/* 变量名列 */
+.cell-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .key-name {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
   color: var(--brand-600, #2563eb);
   background: rgba(59, 130, 246, 0.08);
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 .key-name-input {
+  width: 100%;
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: 4px;
   background: var(--bg-base);
   border: 1px solid var(--brand-500, #3b82f6);
@@ -474,260 +509,279 @@ function onNewValueEnter(e: KeyboardEvent) {
 .key-name-input:focus {
   outline: none;
 }
+
+/* 值列 */
+.cell-value {
+  padding: 4px 8px;
+}
 .value-input {
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--border-base);
+  padding: 5px 10px;
+  border: 1px solid transparent;
   border-radius: 6px;
   font-size: 13px;
   font-family: 'SF Mono', 'Consolas', monospace;
-  background: var(--bg-base);
+  background: transparent;
   color: var(--text-primary);
+}
+.value-input:hover {
+  border-color: var(--border-base);
+  background: var(--bg-base);
 }
 .value-input:focus {
   outline: none;
   border-color: var(--brand-500, #3b82f6);
-}
-.desc-preview {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 4px;
-}
-.row-actions {
-  display: flex;
-  gap: 2px;
-}
-
-.m-empty {
-  text-align: center;
-  padding: 48px 16px;
-  color: var(--text-tertiary);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg-elevated);
-  border: 1px dashed var(--border-base);
-  border-radius: 10px;
-}
-.m-empty svg {
-  width: 36px;
-  height: 36px;
-  opacity: 0.5;
-}
-.m-empty p {
-  font-size: 13px;
-  margin: 0;
-}
-
-/* === 详情侧栏 === */
-.detail-pane {
-  position: sticky;
-  top: 0;
-}
-.detail-card {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-base);
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.detail-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  border-bottom: 1px solid var(--border-base);
-  padding-bottom: 12px;
-}
-.detail-title {
-  font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--brand-600, #2563eb);
-  background: rgba(59, 130, 246, 0.08);
-  padding: 4px 10px;
-  border-radius: 6px;
-  word-break: break-all;
-}
-.badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 500;
-}
-.badge-ok {
-  background: rgba(34, 197, 94, 0.12);
-  color: #16a34a;
-}
-.badge-warn {
-  background: rgba(245, 158, 11, 0.12);
-  color: #d97706;
-}
-
-.detail-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.field-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-.desc-textarea {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--border-base);
-  border-radius: 6px;
-  font-size: 13px;
   background: var(--bg-base);
-  color: var(--text-primary);
-  resize: vertical;
-  font-family: inherit;
-  min-height: 60px;
 }
-.desc-textarea:focus {
+
+/* 描述列 */
+.cell-desc {
+  padding: 4px 8px;
+}
+.desc-input {
+  width: 100%;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  background: transparent;
+  color: var(--text-primary);
+}
+.desc-input:hover {
+  border-color: var(--border-base);
+  background: var(--bg-base);
+}
+.desc-input:focus {
   outline: none;
   border-color: var(--brand-500, #3b82f6);
-}
-.value-row {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.value-row .value-input {
-  flex: 1;
-}
-.hint {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin: 0;
-}
-.hint code {
   background: var(--bg-base);
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 10px;
+}
+.desc-input::placeholder {
+  color: var(--text-tertiary);
+  opacity: 0.7;
 }
 
-.detail-meta {
-  background: var(--bg-base);
-  border-radius: 8px;
-  padding: 10px 12px;
+/* 操作列 */
+.cell-actions {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border: 1px solid var(--border-base);
-}
-.meta-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-}
-.meta-row span {
-  color: var(--text-tertiary);
-}
-.meta-row code {
-  font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 11px;
-  color: var(--brand-600, #2563eb);
-  background: rgba(59, 130, 246, 0.08);
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.detail-danger {
-  border-top: 1px solid var(--border-base);
-  padding-top: 12px;
-  display: flex;
+  gap: 2px;
   justify-content: flex-end;
-}
-
-.detail-empty {
-  text-align: center;
-  padding: 48px 16px;
-  color: var(--text-tertiary);
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  background: var(--bg-elevated);
-  border: 1px dashed var(--border-base);
-  border-radius: 12px;
-}
-.detail-empty svg {
-  width: 32px;
-  height: 32px;
-  opacity: 0.4;
-}
-.detail-empty p {
-  font-size: 13px;
-  margin: 0;
-}
-.detail-empty .hint {
-  font-size: 11px;
 }
 
-/* === 按钮 === */
+/* 按钮基础样式（KeysView scoped，避免依赖其他 view 的 scoped 样式） */
 .btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.15s;
+  justify-content: center;
+  gap: 6px;
   white-space: nowrap;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
+  background: none;
+  color: inherit;
+  user-select: none;
 }
-.btn-sm {
-  padding: 4px 8px;
-  font-size: 11px;
-}
-.btn-icon {
-  padding: 4px;
-}
-.btn-icon svg {
+.btn svg {
   width: 14px;
   height: 14px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.btn-primary {
-  background: var(--brand-500, #3b82f6);
-  color: white;
+.btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
-.btn-primary:hover {
-  background: var(--brand-600, #2563eb);
+.btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  border-radius: 7px;
 }
-.btn-soft {
-  background: var(--bg-elevated);
-  border-color: var(--border-base);
-  color: var(--text-primary);
+.btn-sm svg {
+  width: 13px;
+  height: 13px;
 }
-.btn-soft:hover {
-  background: var(--bg-hover, #f3f4f6);
+.btn-icon {
+  width: 32px;
+  padding: 0;
+}
+.btn-icon.btn-sm {
+  width: 28px;
 }
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
 }
-.btn-ghost:hover {
-  background: var(--bg-hover, #f3f4f6);
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-base);
+  color: var(--text-primary);
 }
 .btn-danger {
   background: transparent;
-  color: #ef4444;
-  border-color: transparent;
+  color: var(--text-tertiary);
 }
-.btn-danger:hover {
-  background: rgba(239, 68, 68, 0.1);
+.btn-danger:hover:not(:disabled),
+.btn-danger:focus-visible {
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+/* 出处列 */
+.cell-usage {
+  padding: 4px 8px;
+}
+.usage-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.usage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--brand-600, #2563eb);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  max-width: 100%;
+  overflow: hidden;
+}
+.usage-chip.kind-plaintext {
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.2);
+}
+.usage-source {
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  opacity: 0.8;
+}
+.usage-scope {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100px;
+}
+.usage-more {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding: 2px 4px;
+}
+.usage-empty {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* 徽章 */
+.badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.badge-warn {
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.12);
+}
+.badge-ok {
+  color: #059669;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+/* + 行 */
+.add-row {
+  cursor: pointer;
+  outline: none;
+}
+.add-row:hover,
+.add-row:focus-visible {
+  background: rgba(59, 130, 246, 0.04);
+}
+.add-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px !important;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+}
+.add-row:hover .add-placeholder,
+.add-row:focus-visible .add-placeholder {
+  color: var(--brand-600, #2563eb);
+}
+.add-placeholder svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 草稿行 */
+.draft-row {
+  background: rgba(59, 130, 246, 0.06) !important;
+}
+.draft-row td {
+  border-top: 1px dashed var(--brand-500, #3b82f6);
+  border-bottom: 1px dashed var(--brand-500, #3b82f6);
+}
+.draft-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.draft-error {
+  color: #ef4444;
+  font-size: 12px;
+  padding: 6px 12px !important;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+/* 空状态 */
+.m-empty {
+  text-align: center;
+  padding: 32px 12px !important;
+  color: var(--text-tertiary);
+}
+.m-empty svg {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 8px;
+  display: block;
+  opacity: 0.5;
+}
+.m-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* 响应式：窄屏改为横向滚动 */
+@media (max-width: 720px) {
+  .table-wrap {
+    overflow-x: auto;
+  }
+  .keys-table {
+    min-width: 600px;
+  }
 }
 </style>
