@@ -14,8 +14,8 @@ const {
 const {
   searchMcpMarket, toggleMarketSource, getMcpDetail, addMarketMcpToTemplate,
   fetchMcpDetail, resolveMcpInstallConfig,
-  parsePastedMcp, addManualMcp, toggleAllMcp, saveMcpAll, syncMcpFull,
-  startEditMcp, cancelEditMcp, saveEditMcp, generateMcpRuntime,
+  parsePastedMcp, addManualMcp, toggleAllMcp,
+  startEditMcp, cancelEditMcp, saveEditMcp,
   toggleMcpDisabled, deleteMcpEntry, saveMcpConfig, addMcpConfigKey, deleteMcpConfigKey,
   loadPulseMcpStatus,
 } = mcp
@@ -192,15 +192,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
           添加 MCP
         </button>
-        <span class="split" aria-hidden="true" />
-        <button type="button" class="btn btn-secondary" @click="generateMcpRuntime">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg>
-          生成 mcp.json
-        </button>
-        <button type="button" class="btn btn-primary" @click="syncMcpFull">
-          <svg viewBox="0 0 24 24"><path d="M12 2v10"/><path d="m8 8 4 4 4-4"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
-          同步到 IDE
-        </button>
       </div>
     </div>
 
@@ -235,10 +226,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               全不选
             </button>
           </div>
-          <button type="button" class="btn btn-primary" @click="saveMcpAll()">
-            <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-            保存
-          </button>
         </div>
       </div>
 
@@ -292,17 +279,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         </table>
       </div>
     </section>
-
-    <div class="keys-bar">
-      <div>
-        <h2>密钥配置</h2>
-        <p>服务里的 <code v-pre>${KEY}</code> 占位符在生成时从此处替换。当前 {{ mcpKeyCount }} 个密钥。</p>
-      </div>
-      <button type="button" class="btn btn-soft" @click="openDrawer('keys')">
-        <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-        管理密钥
-      </button>
-    </div>
 
     <Teleport to="body">
       <Transition name="mcp-studio">
@@ -610,7 +586,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   </div>
                 </template>
                 <template v-else-if="drawer === 'keys'">
-                  <p class="keys-hint">MCP 服务密钥 / Token，生成 mcp.json 时替换 <code v-pre>${KEY}</code> 占位符。</p>
+                  <p class="keys-hint">MCP 服务密钥 / Token，作为 <code v-pre>${KEY}</code> 占位符的 fallback。占位符优先取 OS 环境变量，其次取此处，最后用 <code v-pre>${VAR:-default}</code> 默认值。</p>
                   <div class="keys-list">
                     <div v-for="(_, k) in (mcpConfigData.mcp || {})" :key="k" class="key-row">
                       <code :title="String(k)">{{ k }}</code>
@@ -783,15 +759,6 @@ tr:hover .ops { background: var(--bg-base); }
 .ops .btn-soft { border-color: transparent; background: transparent; color: var(--primary-hover); }
 .ops .btn-soft:hover { background: var(--bg-elevated); border-color: var(--primary-container-strong); }
 .empty-cell { text-align: center; color: var(--text-tertiary); padding: 36px !important; }
-
-.keys-bar {
-  background: var(--bg-elevated); border-radius: 14px; padding: 16px 18px;
-  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
-  border: 1px solid rgba(0,0,0,.03);
-  display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
-}
-.keys-bar h2 { margin: 0 0 2px; font-size: 14px; color: var(--text-primary); }
-.keys-bar p { margin: 0; font-size: 12px; color: var(--text-tertiary); }
 
 .drawer-root {
   position: fixed; inset: 0; z-index: 60;

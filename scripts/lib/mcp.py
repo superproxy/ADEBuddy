@@ -45,28 +45,25 @@ def invoke_generate_step(
 
     template_content = template_file.read_text(encoding="utf-8")
 
-    replaced = 0
     env_map = {k: str(v) if v is not None else "" for k, v in flat_config.items()}
-    for key, value in env_map.items():
-        placeholder = "${" + key + "}"
-        if placeholder in template_content:
-            template_content = template_content.replace(placeholder, value)
-            print(f"  {COLOR_GREEN}[REPLACED] {placeholder}{COLOR_RESET}")
-            replaced += 1
-
-    default_replaced = 0
-    for m in re.finditer(r"\$\{(\w+):-(.*?)\}", template_content):
+    # 扫描占位符并按来源打印日志（OS env 优先 > env_map > default）
+    seen_placeholders = set()
+    for m in re.finditer(r"\$\{(\w+)(?::-([^}]*))?\}", template_content):
         var_name = m.group(1)
+        if var_name in seen_placeholders:
+            continue
+        seen_placeholders.add(var_name)
         default_value = m.group(2)
         full_match = m.group(0)
-        resolved = env_map.get(var_name, default_value)
-        template_content = template_content.replace(full_match, resolved)
-        if var_name in env_map:
-            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (env){resolved}{COLOR_RESET}")
-        else:
-            print(f"  {COLOR_CYAN}[DEFAULT] {full_match} -> {resolved}{COLOR_RESET}")
-        default_replaced += 1
-    replaced += default_replaced
+        os_val = os.environ.get(var_name)
+        if os_val is not None:
+            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (os){os_val}{COLOR_RESET}")
+        elif env_map.get(var_name) is not None:
+            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (env){env_map[var_name]}{COLOR_RESET}")
+        elif default_value is not None:
+            print(f"  {COLOR_CYAN}[DEFAULT] {full_match} -> {default_value}{COLOR_RESET}")
+
+    template_content, replaced = _resolve_placeholder_str(template_content, env_map)
 
     if prune and template_file.suffix.lower() == ".json":
         new_content, pruned_map = prune_unresolved_blocks(template_content)
@@ -188,28 +185,25 @@ def invoke_mcp_generate_step(
         print(f"  {COLOR_DARKGRAY}[SKIP] 跳过 {skipped} 个 disabled 的 MCP 服务{COLOR_RESET}")
     template_content = json.dumps({"mcpServers": enabled_servers}, indent=2, ensure_ascii=False) + "\n"
 
-    replaced = 0
     env_map = {k: str(v) if v is not None else "" for k, v in flat_config.items()}
-    for key, value in env_map.items():
-        placeholder = "${" + key + "}"
-        if placeholder in template_content:
-            template_content = template_content.replace(placeholder, value)
-            print(f"  {COLOR_GREEN}[REPLACED] {placeholder}{COLOR_RESET}")
-            replaced += 1
-
-    default_replaced = 0
-    for m in re.finditer(r"\$\{(\w+):-(.*?)\}", template_content):
+    # 扫描占位符并按来源打印日志（OS env 优先 > env_map > default）
+    seen_placeholders = set()
+    for m in re.finditer(r"\$\{(\w+)(?::-([^}]*))?\}", template_content):
         var_name = m.group(1)
+        if var_name in seen_placeholders:
+            continue
+        seen_placeholders.add(var_name)
         default_value = m.group(2)
         full_match = m.group(0)
-        resolved = env_map.get(var_name, default_value)
-        template_content = template_content.replace(full_match, resolved)
-        if var_name in env_map:
-            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (env){resolved}{COLOR_RESET}")
-        else:
-            print(f"  {COLOR_CYAN}[DEFAULT] {full_match} -> {resolved}{COLOR_RESET}")
-        default_replaced += 1
-    replaced += default_replaced
+        os_val = os.environ.get(var_name)
+        if os_val is not None:
+            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (os){os_val}{COLOR_RESET}")
+        elif env_map.get(var_name) is not None:
+            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (env){env_map[var_name]}{COLOR_RESET}")
+        elif default_value is not None:
+            print(f"  {COLOR_CYAN}[DEFAULT] {full_match} -> {default_value}{COLOR_RESET}")
+
+    template_content, replaced = _resolve_placeholder_str(template_content, env_map)
 
     new_content, pruned_map = prune_unresolved_blocks(template_content)
     if pruned_map:
@@ -273,20 +267,10 @@ def refresh_mcp_json(
 
     template_content = json.dumps({"mcpServers": enabled_servers}, indent=2, ensure_ascii=False) + "\n"
 
-    # 占位符替换（如果提供了 flat_config）
+    # 占位符替换（OS env 优先 > flat_config > default）
     if flat_config:
         env_map = {k: str(v) if v is not None else "" for k, v in flat_config.items()}
-        for key, value in env_map.items():
-            placeholder = "${" + key + "}"
-            if placeholder in template_content:
-                template_content = template_content.replace(placeholder, value)
-        # 默认值占位符
-        for m in re.finditer(r"\$\{(\w+):-(.*?)\}", template_content):
-            var_name = m.group(1)
-            default_value = m.group(2)
-            full_match = m.group(0)
-            resolved = env_map.get(var_name, default_value)
-            template_content = template_content.replace(full_match, resolved)
+        template_content, _ = _resolve_placeholder_str(template_content, env_map)
         # 剪枝未解析的占位符
         template_content, _ = prune_unresolved_blocks(template_content)
 
@@ -579,22 +563,53 @@ def convert_to_codex_mcp(source_file: Path, target_file: Path, force: bool,
     print(f"{COLOR_GREEN}[OK] Codex MCP generated: {target_file}{COLOR_RESET}")
 
 
-def _resolve_placeholders(obj, env_map: dict) -> tuple:
-    if isinstance(obj, str):
-        replaced = 0
-        for key, value in env_map.items():
-            placeholder = "${" + key + "}"
-            if placeholder in obj:
-                obj = obj.replace(placeholder, value)
-                replaced += 1
-        for m in re.finditer(r"\$\{(\w+):-(.*?)\}", obj):
-            var_name = m.group(1)
-            default_value = m.group(2)
-            full_match = m.group(0)
-            resolved = env_map.get(var_name, default_value)
-            obj = obj.replace(full_match, resolved)
+def _resolve_placeholder_str(text: str, env_map: dict) -> tuple:
+    """解析字符串中的 ${VAR} 与 ${VAR:-default} 占位符。
+
+    解析优先级：
+      1. OS 环境变量（os.environ）
+      2. env_map（mcp.yaml 的 mcp: 段 / keys.yaml / flat_config）
+      3. ${VAR:-default} 的 default 字面值
+      4. 都没有 → 保留字面 ${VAR}（交由 prune 阶段处理）
+
+    返回 (resolved_text, replaced_count)。
+    """
+    if not isinstance(text, str):
+        return text, 0
+    replaced = 0
+    # 先处理 ${VAR:-default}（带默认值语法）
+    for m in re.finditer(r"\$\{(\w+):-(.*?)\}", text):
+        var_name = m.group(1)
+        default_value = m.group(2)
+        full_match = m.group(0)
+        os_val = os.environ.get(var_name)
+        if os_val is not None:
+            resolved = os_val
+        elif env_map.get(var_name) is not None:
+            resolved = env_map[var_name]
+        else:
+            resolved = default_value
+        text = text.replace(full_match, resolved)
+        replaced += 1
+    # 再处理 ${VAR}（无默认值语法）
+    for m in re.finditer(r"\$\{(\w+)\}", text):
+        var_name = m.group(1)
+        full_match = m.group(0)
+        os_val = os.environ.get(var_name)
+        if os_val is not None:
+            text = text.replace(full_match, os_val)
             replaced += 1
-        return obj, replaced
+        elif env_map.get(var_name) is not None:
+            text = text.replace(full_match, env_map[var_name])
+            replaced += 1
+        # 都没有时不替换，保留 ${VAR}（交由 prune 阶段处理）
+    return text, replaced
+
+
+def _resolve_placeholders(obj, env_map: dict) -> tuple:
+    """递归解析 dict/list/str 中的 ${VAR} 占位符（OS env 优先于 env_map）。"""
+    if isinstance(obj, str):
+        return _resolve_placeholder_str(obj, env_map)
     if isinstance(obj, dict):
         total = 0
         for k in obj:

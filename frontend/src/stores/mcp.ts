@@ -359,7 +359,7 @@ export const useMcpStore = defineStore('mcp', () => {
   async function addMcpConfigKey() {
     const key = await ui.askPrompt({
       title: '添加密钥',
-      message: '写入 mcp.yaml，生成 mcp.json 时替换 ${KEY}。',
+      message: '写入 mcp.yaml，作为 ${KEY} 占位符的 fallback（OS 环境变量优先）。',
       label: '密钥名称',
       placeholder: '例如 TAVILY_API_KEY / MODELSCOPE_TOKEN',
       confirmText: '添加',
