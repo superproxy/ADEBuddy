@@ -86,50 +86,81 @@ def _resolve_project_root() -> Path:
 
 
 def _migrate_legacy_data_dir() -> None:
-    """macOS: 从旧品牌名 AdeBuddy 迁移用户数据到 AgentBuddy。
+    """从旧品牌名 AdeBuddy 迁移用户数据到 AgentBuddy。
 
-    品牌改名后数据目录路径变化，旧目录（~/Library/Application Support/AdeBuddy/）
-    里的用户数据（config/、.agents/）需迁移到新目录，避免用户密钥等数据丢失。
+    品牌改名后数据目录路径变化，旧目录里的用户数据（config/、.agents/）
+    需迁移到新目录，避免用户密钥等数据丢失。
     仅在新目录缺少关键用户数据时迁移，迁移后不删除旧目录（留作备份）。
+
+    平台差异：
+    - macOS: 旧 ~/Library/Application Support/AdeBuddy/ → 新 .../AgentBuddy/
+    - Windows: 旧 C:\\Program Files\\AdeBuddy\\ → 新 C:\\Program Files\\AgentBuddy\\
+              （也检查 Program Files (x86)）
     """
     if not getattr(sys, "frozen", False):
         return
-    if sys.platform != "darwin":
+
+    current = PROJECT_ROOT
+
+    # 定位旧品牌数据目录
+    legacy_candidates: list = []
+    if sys.platform == "darwin":
+        legacy_candidates.append(Path.home() / "Library" / "Application Support" / "AdeBuddy")
+    elif sys.platform == "win32":
+        # Program Files / Program Files (x86) 下的旧安装目录
+        for env_var in ("ProgramFiles", "ProgramFiles(x86)"):
+            base = os.environ.get(env_var)
+            if base:
+                legacy_candidates.append(Path(base) / "AdeBuddy")
+        # LOCALAPPDATA 下也可能有（便携版）
+        localappdata = os.environ.get("LOCALAPPDATA")
+        if localappdata:
+            legacy_candidates.append(Path(localappdata) / "AdeBuddy")
+    else:
+        # Linux: 旧 ~/.adebuddy/ 或 /opt/AdeBuddy/
+        legacy_candidates.append(Path.home() / ".adebuddy")
+        legacy_candidates.append(Path("/opt/AdeBuddy"))
+
+    legacy = None
+    for c in legacy_candidates:
+        if c.exists() and c != current:
+            legacy = c
+            break
+    if legacy is None:
         return
-    home = Path.home()
-    legacy = home / "Library" / "Application Support" / "AdeBuddy"
-    current = home / "Library" / "Application Support" / "AgentBuddy"
-    if not legacy.exists():
-        return
+
     # 新目录已有 config/keys/keys.yaml 且非空 → 已迁移过，跳过
     dst_keys = current / "config" / "keys" / "keys.yaml"
     if dst_keys.exists() and dst_keys.stat().st_size > 16:
         return
+
     import shutil
+
+    def _merge_dir(src: Path, dst: Path) -> None:
+        """递归合并目录：已存在的目录递归拷贝，已存在的文件不覆盖（新版优先）。"""
+        if not src.exists():
+            return
+        dst.mkdir(parents=True, exist_ok=True)
+        for item in src.iterdir():
+            dst_item = dst / item.name
+            if item.is_dir():
+                _merge_dir(item, dst_item)
+            else:
+                if not dst_item.exists():
+                    shutil.copy2(item, dst_item)
+
     try:
         # 迁移 config/（用户密钥、llm、mcp 等配置）
         legacy_config = legacy / "config"
         dst_config = current / "config"
         if legacy_config.exists():
-            for item in legacy_config.iterdir():
-                dst_item = dst_config / item.name
-                if dst_item.exists():
-                    # 已存在则合并：目录递归拷贝（覆盖），文件跳过（保留新版）
-                    if item.is_dir():
-                        shutil.copytree(item, dst_item, dirs_exist_ok=True)
-                    # 文件不覆盖（新版本优先）
-                else:
-                    if item.is_dir():
-                        shutil.copytree(item, dst_item)
-                    else:
-                        dst_config.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(item, dst_item)
+            _merge_dir(legacy_config, dst_config)
             print(f"[migrate] 已从旧目录迁移 config/: {legacy_config} → {dst_config}", file=sys.stderr)
         # 迁移 .agents/（智能体数据）
         legacy_agents = legacy / ".agents"
         dst_agents = current / ".agents"
-        if legacy_agents.exists() and not dst_agents.exists():
-            shutil.copytree(legacy_agents, dst_agents)
+        if legacy_agents.exists():
+            _merge_dir(legacy_agents, dst_agents)
             print(f"[migrate] 已从旧目录迁移 .agents/: {legacy_agents} → {dst_agents}", file=sys.stderr)
     except Exception as e:
         print(f"[migrate][WARN] 迁移旧数据失败: {e}", file=sys.stderr)
