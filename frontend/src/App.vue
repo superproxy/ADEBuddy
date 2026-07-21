@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import Header from './components/Header.vue'
-import SyncBar from './components/SyncBar.vue'
 import Toast from './components/Toast.vue'
 import Modal from './components/Modal.vue'
 import AppDialog from './components/AppDialog.vue'
@@ -62,9 +61,6 @@ onBeforeUnmount(() => {})
 <template>
   <div class="app-root min-h-screen">
     <Header :tab="tab" :tabs="tabs" :default-favorite-keys="defaultFavoriteKeys" @update:tab="tab = $event" />
-
-    <!-- 方案 D：同步工具栏内联在 Header 下方 -->
-    <SyncBar :tab="tab" />
 
     <main class="max-w-[1600px] w-full mx-auto px-6 py-5">
       <IdeView v-if="tab === 'ide'" />

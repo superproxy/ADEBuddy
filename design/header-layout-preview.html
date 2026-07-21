@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>飞翼 · Top 工具栏设计稿</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --bg-elevated: #ffffff;
+    --bg-sunken: #f1f3f5;
+    --border: #e5e7eb;
+    --text-1: #111827;
+    --text-2: #6b7280;
+    --text-3: #9ca3af;
+    --primary: #165dff;
+    --primary-on: #ffffff;
+    --primary-container: #e8f0ff;
+    --warning: #e5484d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif;
+    background: var(--bg);
+    color: var(--text-1);
+    padding: 24px;
+  }
+  h2 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-2);
+    margin: 24px 0 8px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  h2:first-child { margin-top: 0; }
+  h2 .tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    background: var(--primary);
+    color: white;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .desc {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-bottom: 8px;
+  }
+
+  /* ========== Header 公共样式 ========== */
+  .app-header {
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+  }
+  .brand-mark {
+    width: 38px; height: 38px;
+    border-radius: 11px;
+    background: linear-gradient(135deg, #165dff, #0e3a8a);
+    display: grid; place-items: center;
+    color: white;
+    flex-shrink: 0;
+  }
+  .brand-mark svg { width: 22px; height: 22px; }
+  .brand-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .version-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 8px;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px; font-weight: 600;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all 0.18s;
+    margin-top: 4px;
+  }
+  .version-pill:hover { border-color: var(--primary); color: var(--primary); }
+  .version-pill .vp-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+  }
+  .version-pill.has-upgrade {
+    background: linear-gradient(135deg, #fff7e6, #ffe7ba);
+    border-color: #ffa940;
+    color: #d46b08;
+  }
+  .version-pill.has-upgrade .vp-dot {
+    background: #ffa940;
+    box-shadow: 0 0 0 2px rgba(255, 169, 64, 0.3);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.3); opacity: 0.7; }
+  }
+
+  /* Tab 导航 */
+  .tab-track {
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 4px;
+    background: var(--bg-sunken);
+    border-radius: 12px;
+  }
+  .tab {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 6px 12px;
+    font-size: 13px; font-weight: 500;
+    color: var(--text-2);
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--text-1); background: var(--bg-elevated); }
+  .tab.is-active {
+    background: var(--primary);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(22, 93, 255, 0.3);
+  }
+  .tab .drag-handle { color: var(--text-3); font-size: 14px; opacity: 0; transition: opacity 0.15s; }
+  .tab:hover .drag-handle { opacity: 0.6; }
+  .more-trigger {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 6px 12px;
+    font-size: 13px; font-weight: 500;
+    color: var(--text-2);
+    border-radius: 8px;
+    cursor: pointer;
+    background: transparent; border: none;
+  }
+  .more-trigger:hover { color: var(--text-1); background: var(--bg-elevated); }
+
+  /* SyncBar 胶囊容器 */
+  .sync-toolbar {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 4px 3px 6px;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: border-color 0.18s, box-shadow 0.18s;
+  }
+  .sync-toolbar:hover {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
+  }
+  .target-trigger {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 8px 4px 4px;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .target-trigger:hover { background: var(--bg-elevated); }
+  .avatar-stack { display: inline-flex; }
+  .avatar-stack .av {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-sunken);
+    margin-left: -6px;
+    font-size: 10px; font-weight: 700;
+    color: white;
+    display: grid; place-items: center;
+  }
+  .avatar-stack .av:first-child { margin-left: 0; }
+  .avatar-stack .av.t { background: #165dff; }
+  .avatar-stack .av.c { background: #6366f1; }
+  .avatar-stack .av.o { background: #f97316; }
+  .target-count { font-size: 11px; font-weight: 600; color: var(--text-2); }
+  .target-caret { color: var(--text-3); }
+  .tb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
+  .sync-cta {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 7px;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .sync-cta:hover { background: #0e44cc; }
+  .auto-toggle {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 5px 8px 5px 6px;
+    background: transparent; border: none;
+    border-radius: 7px;
+    font-size: 11px; font-weight: 600;
+    color: var(--text-3);
+    cursor: pointer;
+  }
+  .auto-toggle:not(.on):hover { background: var(--primary-container); color: var(--primary); }
+  .auto-toggle:not(.on):hover .auto-dot { background: var(--primary); }
+  .auto-toggle .auto-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-3);
+    transition: all 0.18s;
+  }
+  .auto-toggle.on { background: var(--primary-container); color: var(--primary); }
+  .auto-toggle.on .auto-dot { background: var(--primary); box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2); }
+  .auto-toggle.on:hover { background: rgba(229, 72, 77, 0.1); color: var(--warning); }
+  .auto-toggle.on:hover .auto-dot { background: var(--warning); box-shadow: 0 0 0 2px rgba(229, 72, 77, 0.2); }
+
+  /* 主题按钮 */
+  .theme-toggle {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-2);
+  }
+  .theme-toggle:hover { color: var(--primary); border-color: var(--primary); }
+  .theme-toggle svg { width: 16px; height: 16px; }
+
+  /* ========== 方案 A：当前三列优化 ========== */
+  .layout-a .command-bar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 16px;
+  }
+  .layout-a .brand-col { display: flex; align-items: center; gap: 12px; }
+  .layout-a .nav-col { display: flex; justify-content: center; }
+  .layout-a .actions-col { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+
+  /* ========== 方案 B：双行布局 ========== */
+  .layout-b .row-top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+  .layout-b .row-bottom {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .layout-b .brand-col { display: flex; align-items: center; gap: 12px; }
+  .layout-b .actions-col { display: flex; align-items: center; gap: 8px; }
+
+  /* ========== 方案 C：紧凑单行 ========== */
+  .layout-c .command-bar {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .layout-c .brand-col { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .layout-c .nav-col { flex: 1; display: flex; justify-content: flex-start; overflow-x: auto; }
+  .layout-c .actions-col { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+  .hint {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #fffbe6;
+    border: 1px solid #ffe58f;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #874d00;
+    line-height: 1.6;
+  }
+
+  .wrapper {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+</style>
+</head>
+<body>
+
+<h2>方案 A · 当前三列布局优化 <span class="tag">当前</span></h2>
+<div class="desc">品牌在左、导航居中、同步+主题在右。三栏等分，视觉平衡。</div>
+<div class="wrapper">
+  <header class="app-header layout-a">
+    <div class="command-bar">
+      <!-- 左：品牌 -->
+      <div class="brand-col">
+        <div class="brand-mark">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 6 L16 26" />
+            <path d="M16 10 C 12 8, 7 9, 4 12 C 7 13, 11 13, 14 12" />
+            <path d="M16 10 C 20 8, 25 9, 28 12 C 25 13, 21 13, 18 12" />
+            <path d="M16 17 C 12 15, 8 16, 5 19 C 8 20, 12 20, 15 19" />
+            <path d="M16 17 C 20 15, 24 16, 27 19 C 24 20, 20 20, 17 19" />
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">飞翼</div>
+          <button class="version-pill has-upgrade">
+            <span class="vp-dot"></span>
+            v1.12.8 → v1.12.9
+          </button>
+        </div>
+      </div>
+      <!-- 中：导航 -->
+      <div class="nav-col">
+        <div class="tab-track">
+          <div class="tab is-active"><span class="drag-handle">⠿</span>概览</div>
+          <div class="tab"><span class="drag-handle">⠿</span>密钥</div>
+          <div class="tab"><span class="drag-handle">⠿</span>LLM</div>
+          <div class="tab"><span class="drag-handle">⠿</span>MCP</div>
+          <div class="tab"><span class="drag-handle">⠿</span>Skills</div>
+          <div class="tab"><span class="drag-handle">⠿</span>插件</div>
+          <button class="more-trigger">更多 3 ▾</button>
+        </div>
+      </div>
+      <!-- 右：同步 + 主题 -->
+      <div class="actions-col">
+        <div class="sync-toolbar">
+          <div class="target-trigger">
+            <div class="avatar-stack">
+              <div class="av t">T</div>
+              <div class="av c">C</div>
+              <div class="av o">O</div>
+            </div>
+            <span class="target-count">3个目标</span>
+            <span class="target-caret">▾</span>
+          </div>
+          <div class="tb-sep"></div>
+          <button class="sync-cta">↻ 点击同步 3</button>
+          <button class="auto-toggle on">
+            <span class="auto-dot"></span>
+            已自动
+          </button>
+        </div>
+        <button class="theme-toggle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+</div>
+
+<h2>方案 B · 双行布局</h2>
+<div class="desc">上行：品牌+版本 | 同步+主题；下行：导航全宽左对齐。导航空间最大化。</div>
+<div class="wrapper">
+  <header class="app-header layout-b">
+    <div class="row-top">
+      <div class="brand-col">
+        <div class="brand-mark">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 6 L16 26" />
+            <path d="M16 10 C 12 8, 7 9, 4 12 C 7 13, 11 13, 14 12" />
+            <path d="M16 10 C 20 8, 25 9, 28 12 C 25 13, 21 13, 18 12" />
+            <path d="M16 17 C 12 15, 8 16, 5 19 C 8 20, 12 20, 15 19" />
+            <path d="M16 17 C 20 15, 24 16, 27 19 C 24 20, 20 20, 17 19" />
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">飞翼</div>
+          <button class="version-pill has-upgrade">
+            <span class="vp-dot"></span>
+            v1.12.8 → v1.12.9
+          </button>
+        </div>
+      </div>
+      <div class="actions-col">
+        <div class="sync-toolbar">
+          <div class="target-trigger">
+            <div class="avatar-stack">
+              <div class="av t">T</div>
+              <div class="av c">C</div>
+              <div class="av o">O</div>
+            </div>
+            <span class="target-count">3个目标</span>
+            <span class="target-caret">▾</span>
+          </div>
+          <div class="tb-sep"></div>
+          <button class="sync-cta">↻ 点击同步 3</button>
+          <button class="auto-toggle on">
+            <span class="auto-dot"></span>
+            已自动
+          </button>
+        </div>
+        <button class="theme-toggle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="row-bottom">
+      <div class="tab-track">
+        <div class="tab is-active"><span class="drag-handle">⠿</span>概览</div>
+        <div class="tab"><span class="drag-handle">⠿</span>密钥</div>
+        <div class="tab"><span class="drag-handle">⠿</span>LLM</div>
+        <div class="tab"><span class="drag-handle">⠿</span>MCP</div>
+        <div class="tab"><span class="drag-handle">⠿</span>Skills</div>
+        <div class="tab"><span class="drag-handle">⠿</span>插件</div>
+        <div class="tab"><span class="drag-handle">⠿</span>规则</div>
+        <div class="tab"><span class="drag-handle">⠿</span>命令</div>
+        <div class="tab"><span class="drag-handle">⠿</span>子智能体</div>
+        <button class="more-trigger">更多 ▾</button>
+      </div>
+    </div>
+  </header>
+</div>
+
+<h2>方案 C · 紧凑单行</h2>
+<div class="desc">品牌+导航左对齐连续排布，同步+主题靠右。最省垂直空间，但导航宽度受限时需滚动。</div>
+<div class="wrapper">
+  <header class="app-header layout-c">
+    <div class="command-bar">
+      <div class="brand-col">
+        <div class="brand-mark">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 6 L16 26" />
+            <path d="M16 10 C 12 8, 7 9, 4 12 C 7 13, 11 13, 14 12" />
+            <path d="M16 10 C 20 8, 25 9, 28 12 C 25 13, 21 13, 18 12" />
+            <path d="M16 17 C 12 15, 8 16, 5 19 C 8 20, 12 20, 15 19" />
+            <path d="M16 17 C 20 15, 24 16, 27 19 C 24 20, 20 20, 17 19" />
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">飞翼</div>
+          <button class="version-pill has-upgrade">
+            <span class="vp-dot"></span>
+            v1.12.8 → v1.12.9
+          </button>
+        </div>
+      </div>
+      <div class="nav-col">
+        <div class="tab-track">
+          <div class="tab is-active"><span class="drag-handle">⠿</span>概览</div>
+          <div class="tab"><span class="drag-handle">⠿</span>密钥</div>
+          <div class="tab"><span class="drag-handle">⠿</span>LLM</div>
+          <div class="tab"><span class="drag-handle">⠿</span>MCP</div>
+          <div class="tab"><span class="drag-handle">⠿</span>Skills</div>
+          <div class="tab"><span class="drag-handle">⠿</span>插件</div>
+          <button class="more-trigger">更多 3 ▾</button>
+        </div>
+      </div>
+      <div class="actions-col">
+        <div class="sync-toolbar">
+          <div class="target-trigger">
+            <div class="avatar-stack">
+              <div class="av t">T</div>
+              <div class="av c">C</div>
+              <div class="av o">O</div>
+            </div>
+            <span class="target-count">3个目标</span>
+            <span class="target-caret">▾</span>
+          </div>
+          <div class="tb-sep"></div>
+          <button class="sync-cta">↻ 点击同步 3</button>
+          <button class="auto-toggle on">
+            <span class="auto-dot"></span>
+            已自动
+          </button>
+        </div>
+        <button class="theme-toggle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+</div>
+
+<div class="hint">
+  <strong>对比要点：</strong><br>
+  • <strong>方案 A（当前）</strong>：三列等分，导航居中。导航项多时中间区可能拥挤，更多菜单收纳低频项。<br>
+  • <strong>方案 B</strong>：双行布局，导航独占一行可展示更多项无需折叠到"更多"，但占用更多垂直空间。<br>
+  • <strong>方案 C</strong>：品牌与导航紧贴左对齐，视觉最紧凑，但窗口窄时导航需横向滚动。<br>
+  <br>
+  <strong>同步胶囊</strong>：三个方案均保留 IDE 头像组 + 点击同步 + 自动开关 的胶囊容器设计，hover 已自动时变红提示取消。
+</div>
+
+</body>
+</html>

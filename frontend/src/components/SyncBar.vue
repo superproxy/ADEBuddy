@@ -238,14 +238,6 @@ onBeforeUnmount(() => {
   <!-- 方案 D · 内联工具栏：放弃面板形态，压缩为 Header 下方 44px 工具栏 -->
   <div v-if="visible" class="sync-wrapper">
     <div class="sync-toolbar">
-    <!-- 范围 chip：主文案统一为「同步到 IDE」 -->
-    <span class="scope-chip" :title="actionHint">
-      <span class="dot"></span>
-      同步到 IDE
-    </span>
-
-    <div class="divider-v"></div>
-
     <!-- 目标 IDE 触发器：头像组 + 数量 + caret -->
     <div
       v-if="needsIdeTargets"
@@ -277,24 +269,10 @@ onBeforeUnmount(() => {
     <!-- 非 IDE 目标（cmd/subagent/rules/hooks）：显示动作描述 -->
     <span v-else class="target-hint">{{ actionHint }}</span>
 
-    <div class="spacer"></div>
+    <div class="tb-sep"></div>
 
-    <!-- 合成元素：模式分段（手动/自动）+ 同步按钮 -->
+    <!-- 同步按钮 + 自动开关 -->
     <div class="sync-combo" :class="{ auto: autoSync }">
-      <div class="mode-seg">
-        <button
-          class="seg-btn"
-          :class="{ active: !autoSync }"
-          :title="'切换为手动模式：点击同步按钮立即同步'"
-          @click="setAutoSync(false)"
-        >手动</button>
-        <button
-          class="seg-btn"
-          :class="{ active: autoSync }"
-          :title="'切换为自动模式：保存配置即自动同步'"
-          @click="setAutoSync(true)"
-        >自动</button>
-      </div>
       <button
         class="sync-cta"
         :disabled="!canSync || autoSync"
@@ -305,8 +283,17 @@ onBeforeUnmount(() => {
           <path d="M4 12a8 8 0 0 1 14.9-4M20 12a8 8 0 0 1-14.9 4" stroke-linecap="round" />
           <path d="M19 4v4h-4M5 20v-4h4" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        {{ autoSync ? '自动同步' : '立即同步' }}
+        {{ autoSync ? '自动同步中' : '点击同步' }}
         <span class="count">{{ execCountLabel }}</span>
+      </button>
+      <button
+        class="auto-toggle"
+        :class="{ on: autoSync }"
+        :title="autoSync ? '点击关闭自动同步' : '点击开启自动同步'"
+        @click="setAutoSync(!autoSync)"
+      >
+        <span class="auto-dot"></span>
+        <span class="auto-label">{{ autoSync ? '已自动' : '自动' }}</span>
       </button>
     </div>
 
@@ -354,9 +341,9 @@ onBeforeUnmount(() => {
             :class="{ selected: isSelected(ide.key) }"
             @click="toggleIde(ide.key)"
             draggable="true"
-            @dragstart="onIdeDragStart(ide.key)"
-            @dragover.prevent="onIdeDragOver(ide.key)"
-            @drop="onIdeDrop(ide.key)"
+            @dragstart="onIdeDragStart($event, ide.key)"
+            @dragover.prevent="onIdeDragOver($event, ide.key)"
+            @drop="onIdeDrop($event, ide.key)"
             @dragend="onIdeDragEnd"
           >
             <span class="check"></span>
@@ -376,26 +363,28 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* —— 同步容器：工具栏 —— */
+/* —— 同步容器：内联到 Header actions 区 —— */
 .sync-wrapper {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  background: var(--bg-syncbar);
-  border-bottom: 1px solid var(--border-base);
+  display: inline-flex;
 }
 
-/* —— 方案 D · 内联工具栏 —— */
+/* —— 内联工具栏：胶囊容器，把 IDE 选择 + 同步 + 自动 视觉上合为一体 —— */
 .sync-toolbar {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  height: 44px;
-  padding: 0 24px;
-  background: var(--bg-syncbar);
+  gap: 4px;
+  padding: 3px 4px 3px 6px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', sans-serif;
   font-size: 12px;
   color: var(--text-primary);
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.sync-toolbar:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
 }
 
 /* —— 范围 chip —— */
@@ -489,52 +478,9 @@ onBeforeUnmount(() => {
 /* —— 合成元素：模式分段 + 同步按钮 —— */
 .sync-combo {
   display: inline-flex;
-  align-items: stretch;
-  border-radius: 8px;
-  overflow: hidden;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
-  box-shadow: var(--shadow-md);
-}
-/* 模式分段 */
-.mode-seg {
-  display: inline-flex;
-  align-items: stretch;
-  background: var(--bg-sunken);
-  padding: 3px;
-  gap: 2px;
-}
-.seg-btn {
-  padding: 4px 14px;
-  background: transparent;
-  border: none;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  font-family: inherit;
-  border-radius: 5px;
-  transition: all 0.18s;
-  white-space: nowrap;
-}
-.seg-btn:hover:not(.active) {
-  color: var(--text-secondary);
-  background: var(--bg-elevated);
-}
-.seg-btn.active {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
-  font-weight: 700;
-}
-/* 手动高亮：手动模式时，分段按钮文字变蓝 */
-.sync-combo:not(.auto) .seg-btn.active {
-  color: var(--primary);
-}
-/* 自动模式：分段自动按钮变蓝填充 */
-.sync-combo.auto .seg-btn.active {
-  background: var(--primary);
-  color: var(--primary-on);
-  box-shadow: none;
 }
 
 /* 同步按钮 */
@@ -542,38 +488,29 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px 7px 12px;
-  background: var(--text-primary);
-  color: var(--bg-base);
+  padding: 5px 11px;
+  background: var(--primary);
+  color: var(--primary-on);
   border: none;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
+  border-radius: 7px;
   transition: background 0.2s;
   white-space: nowrap;
 }
 .sync-combo .sync-cta:hover:not(:disabled) {
-  background: #000;
-}
-:root[data-theme='dark'] .sync-combo .sync-cta:hover:not(:disabled) {
-  background: #000;
-}
-.sync-combo:not(.auto) .sync-cta {
-  background: var(--primary);
-  box-shadow: var(--shadow-primary);
-  color: var(--primary-on);
-}
-.sync-combo:not(.auto) .sync-cta:hover:not(:disabled) {
   background: var(--primary-hover);
 }
 .sync-combo.auto .sync-cta {
   background: var(--border-strong);
   cursor: not-allowed;
-  color: var(--primary-on);
+  box-shadow: none;
+  opacity: 0.7;
 }
 .sync-combo.auto .sync-cta:disabled {
-  opacity: 1;
+  opacity: 0.7;
 }
 .sync-combo .sync-cta svg {
   width: 12px;
@@ -588,8 +525,71 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.spacer {
-  flex: 1;
+/* 自动开关 */
+.auto-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px 5px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+/* 未开启时 hover：提示可开启 */
+.auto-toggle:not(.on):hover {
+  background: var(--primary-container);
+  color: var(--primary);
+}
+.auto-toggle:not(.on):hover .auto-dot {
+  background: var(--primary);
+}
+.auto-toggle .auto-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: all 0.18s;
+}
+.auto-toggle .auto-label {
+  transition: opacity 0.18s;
+}
+/* 已开启状态 */
+.auto-toggle.on {
+  background: var(--primary-container);
+  color: var(--primary);
+}
+.auto-toggle.on .auto-dot {
+  background: var(--primary);
+  box-shadow: 0 0 0 2px rgba(22, 93, 255, 0.2);
+}
+/* 已开启时 hover：显示取消选中状态（警示色） */
+.auto-toggle.on:hover {
+  background: rgba(255, 77, 79, 0.1);
+  color: #e5484d;
+  border-color: transparent;
+}
+.auto-toggle.on:hover .auto-dot {
+  background: #e5484d;
+  box-shadow: 0 0 0 2px rgba(229, 72, 77, 0.2);
+}
+.auto-toggle.on:hover .auto-label::before {
+  content: '✕ ';
+  font-size: 10px;
+}
+
+.tb-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border-base);
+  margin: 0 2px;
+  flex-shrink: 0;
 }
 
 /* —— 目标 IDE 浮层 —— */

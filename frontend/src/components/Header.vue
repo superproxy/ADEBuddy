@@ -3,6 +3,7 @@ import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useThemeStore } from '../stores/theme'
 import { useUpgradeStore } from '../stores/upgrade'
 import { useNavOrderStore } from '../stores/navOrder'
+import SyncBar from './SyncBar.vue'
 
 interface TabItem {
   key: string
@@ -450,7 +451,9 @@ onBeforeUnmount(() => {
         </nav>
 
         <!-- Actions -->
-        <div class="actions flex items-center justify-end max-[1100px]:col-start-2 max-[1100px]:row-start-1">
+        <div class="actions flex items-center justify-end gap-2 max-[1100px]:col-start-2 max-[1100px]:row-start-1">
+          <!-- 同步控件（内联） -->
+          <SyncBar :tab="tab" />
           <!-- 主题切换按钮 -->
           <button
             class="theme-toggle"
@@ -730,30 +733,25 @@ onBeforeUnmount(() => {
   to { transform: rotate(360deg); }
 }
 
-/* 有新版本：橙色脉冲态 */
+/* 有新版本：克制提示，仅边框+小点变橙，无脉冲无背景渐变 */
 .version-pill.has-upgrade {
-  border-color: rgba(255, 125, 0, 0.4);
-  background: linear-gradient(180deg, rgba(255, 125, 0, 0.06), rgba(255, 125, 0, 0.02));
+  border-color: rgba(255, 125, 0, 0.35);
 }
 
 .version-pill.has-upgrade:hover {
   border-color: var(--warning);
-  background: rgba(255, 125, 0, 0.12);
-  box-shadow: 0 4px 14px rgba(255, 125, 0, 0.25);
+  background: rgba(255, 125, 0, 0.06);
 }
 
 .version-pill.has-upgrade .vp-dot {
   background: var(--warning);
-  box-shadow: 0 0 8px rgba(255, 125, 0, 0.7);
-  animation: vp-glow-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes vp-glow-pulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 6px rgba(255, 125, 0, 0.6); }
-  50% { transform: scale(1.25); box-shadow: 0 0 12px rgba(255, 125, 0, 0.9); }
 }
 
 .version-pill.has-upgrade .vp-text {
+  color: var(--text-secondary);
+}
+
+.version-pill.has-upgrade:hover .vp-text {
   color: var(--warning);
 }
 
