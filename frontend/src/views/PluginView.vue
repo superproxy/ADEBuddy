@@ -209,7 +209,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
           <h2><span class="star" aria-hidden="true">★</span> 热门推荐</h2>
           <span class="section-count">{{ featuredPlugins.length }} 个</span>
         </header>
-        <div class="grid grid-featured">
+        <div class="grid grid-featured" :class="{ 'as-list': viewMode === 'list' }">
           <article
             v-for="p in featuredPlugins"
             :key="p.file"
@@ -269,7 +269,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
           <h2>已安装</h2>
           <span class="section-count">{{ installedPlugins.length }} 个</span>
         </header>
-        <div class="grid">
+        <div class="grid" :class="{ 'as-list': viewMode === 'list' }">
           <article
             v-for="p in installedPlugins"
             :key="p.file"
@@ -329,7 +329,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
           <h2>全部插件</h2>
           <span class="section-count">{{ otherPlugins.length }} 个</span>
         </header>
-        <div class="grid">
+        <div class="grid" :class="{ 'as-list': viewMode === 'list' }">
           <article
             v-for="p in otherPlugins"
             :key="p.file"

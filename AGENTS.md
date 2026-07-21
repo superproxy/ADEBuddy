@@ -1,4 +1,4 @@
-# AdeBuddy — 智能体构建与分发平台
+# AgentBuddy — 智能体构建与分发平台
 
 - **项目定位**：AI 智能体构建与分发平台 — 可视化构建智能体配置（LLM / MCP / Skills / Rules / Commands / Subagents / Hooks），通过插件化打包分发，一键同步到多 IDE
 - **技术栈**：Python 3 + Flask + pywebview + PyInstaller（桌面应用）+ Vue 3 + Vite（前端）

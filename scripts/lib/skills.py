@@ -437,7 +437,7 @@ def _list_skills_via_github(owner: str, repo: str, timeout: int = 20) -> list:
 
     headers = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "AdeBuddy/1.0",
+        "User-Agent": "AgentBuddy/1.0",
         "X-GitHub-Api-Version": "2022-11-28",
     }
     token = os.environ.get("GITHUB_TOKEN", "").strip()
@@ -484,7 +484,7 @@ def _list_skills_via_github(owner: str, repo: str, timeout: int = 20) -> list:
     for it in items:
         try:
             raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{it['path']}"
-            r = requests.get(raw_url, headers={"User-Agent": "AdeBuddy/1.0"}, timeout=8)
+            r = requests.get(raw_url, headers={"User-Agent": "AgentBuddy/1.0"}, timeout=8)
             if r.status_code != 200:
                 continue
             text = r.text[:5000]

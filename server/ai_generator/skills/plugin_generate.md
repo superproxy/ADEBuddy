@@ -9,7 +9,7 @@
 
 输出必须符合 `template/plugins/plugin.schema.yaml` 定义的字段：
 - **标准字段**（对齐 Claude Code / Codex CLI / VSCode）：`name` / `version` / `description` / `author` / `license` / `keywords` / `categories`
-- **AdeBuddy 扩展字段**（多 IDE 同步能力）：`mcpServers` / `skills` / `llm` / `subagents` / `rules` / `commands` / `hooks` / `envVars` / `scripts`
+- **AgentBuddy 扩展字段**（多 IDE 同步能力）：`mcpServers` / `skills` / `llm` / `subagents` / `rules` / `commands` / `hooks` / `envVars` / `scripts`
 - `scripts` 对齐 npm 生命周期：`preinstall` / `install` / `postinstall` / `preuninstall` / `uninstall` / `postuninstall` / `prepare`
 
 ## 示例
@@ -21,7 +21,7 @@
 name: java-backend-agent
 version: "1.0.0"
 description: "Java 后端开发智能体，精通 Spring Boot / MyBatis / MySQL / Redis"
-author: "AdeBuddy"
+author: "AgentBuddy"
 license: "MIT"
 keywords: [java, spring-boot, backend, mysql, redis]
 categories: [backend]
@@ -67,7 +67,7 @@ hooks: false
 1. `name` — 英文短名，kebab-case，如 `java-backend-agent`
 2. `version` — 默认 `"1.0.0"`，严格 semver
 3. `description` — 简洁中文说明（≤80 字符）
-4. `author` — 默认 `"AdeBuddy"`，除非用户指定其他
+4. `author` — 默认 `"AgentBuddy"`，除非用户指定其他
 5. `license` — 默认 `"MIT"`，除非用户指定其他
 6. `keywords` — 3-7 个发现标签（英文，小写，连字符分隔）
 7. `categories` — 1-2 个分类，必须从枚举中选：
@@ -77,7 +77,7 @@ hooks: false
 
 - `homepage` / `repository` / `icon` / `defaultEnabled` / `dependencies` / `userConfig` / `interface` / `apps`
 
-### AdeBuddy 扩展字段
+### AgentBuddy 扩展字段
 
 - `mcpServers` — 仅在用户需求涉及外部工具时生成
 - `skills` — 优先使用本地技能名或 GitHub 简写（`owner/repo[@skill]`）

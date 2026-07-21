@@ -242,9 +242,54 @@ IDE_DETECT_META = {
 }
 
 
+def _user_bin_dirs() -> list[str]:
+    """返回常见用户级 bin 目录（GUI 进程 PATH 受限，需手动补全）。
+
+    macOS GUI 应用（pywebview/PyInstaller 打包）不继承 shell 配置
+    （.zshrc/.zprofile 的 export PATH），PATH 仅含 /usr/bin:/bin 等，
+    导致 ~/.local/bin、~/.nvm/.../bin 下的 CLI 全部检测不到。
+    此函数补全这些目录，作为 shutil.which 的兜底搜索范围。
+    """
+    home = Path.home()
+    dirs: list[str] = []
+    # 通用用户 bin
+    for d in [".local/bin", ".cargo/bin", ".deno/bin", ".bun/bin", "go/bin",
+              ".yarn/bin", ".fnm/current/bin", ".volta/bin"]:
+        p = home / d
+        if p.is_dir():
+            dirs.append(str(p))
+    # nvm：可能多版本，取所有 node 版本的 bin
+    nvm_dir = home / ".nvm" / "versions" / "node"
+    if nvm_dir.is_dir():
+        for v in nvm_dir.iterdir():
+            if v.is_dir() and (v / "bin").is_dir():
+                dirs.append(str(v / "bin"))
+    # Homebrew（Apple Silicon + Intel）
+    for d in ["/opt/homebrew/bin", "/usr/local/bin"]:
+        if Path(d).is_dir():
+            dirs.append(d)
+    return dirs
+
+
 def _which(cli_name: str) -> str | None:
-    """shutil.which 封装，返回绝对路径或 None。"""
-    return shutil.which(cli_name)
+    """shutil.which 封装，返回绝对路径或 None。
+
+    GUI 进程 PATH 受限，先走 shutil.which（含 Windows PATHEXT），
+    失败后补搜常见用户 bin 目录（~/.local/bin、~/.nvm/.../bin 等）。
+    """
+    found = shutil.which(cli_name)
+    if found:
+        return found
+    # GUI 进程兜底：补搜用户 bin 目录
+    for d in _user_bin_dirs():
+        candidate = Path(d) / cli_name
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+        # macOS/Linux 无后缀，也试 .exe（极少见，跨平台兼容）
+        candidate_exe = Path(d) / f"{cli_name}.exe"
+        if candidate_exe.exists() and os.access(candidate_exe, os.X_OK):
+            return str(candidate_exe)
+    return None
 
 
 def _resolve_cmd_wrapper_to_exe(cmd_path: str) -> str:

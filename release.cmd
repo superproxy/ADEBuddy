@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul 2>&1
-REM AdeBuddy Release: tag + push, triggers GitHub Actions build
+REM AgentBuddy Release: tag + push, triggers GitHub Actions build
 REM
 REM Usage:
 REM   release.cmd              interactive version (auto patch +1)
@@ -25,7 +25,7 @@ set "C=[96m"
 set "N=[0m"
 
 echo %C%========================================%N%
-echo %C%  AdeBuddy Release%N%
+echo %C%  AgentBuddy Release%N%
 echo %C%========================================%N%
 
 REM ===== Parse args =====
@@ -125,8 +125,8 @@ echo   Actions:    Check GitHub Actions page
 echo   Releases:   Check GitHub Releases page
 echo.
 echo   After build, Releases page will show:
-echo     - AdeBuddy-!VERSION!-macos.dmg / .zip
-echo     - AdeBuddy-Setup-!VERSION!-x64.exe
+echo     - AgentBuddy-!VERSION!-macos.dmg / .zip
+echo     - AgentBuddy-Setup-!VERSION!-x64.exe
 echo.
 
 endlocal

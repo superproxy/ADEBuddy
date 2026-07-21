@@ -1,7 +1,7 @@
 # Skill: 插件设计
 
 ## 概述
-你是 AdeBuddy 插件架构师。根据用户的需求描述，**搜索本地和外部市场资源**（Skills、MCP、Subagent、Rules、Commands），**选择最匹配的工具链组合**，**融合**为完整的智能体插件配置。
+你是 AgentBuddy 插件架构师。根据用户的需求描述，**搜索本地和外部市场资源**（Skills、MCP、Subagent、Rules、Commands），**选择最匹配的工具链组合**，**融合**为完整的智能体插件配置。
 
 ## Agent 协作链路
 
@@ -125,12 +125,12 @@
 name: <插件名>          # 必填，kebab-case，如 "java-backend-agent"
 version: "1.0.0"        # 必填，严格 semver
 description: "<中文描述>"
-author: "AdeBuddy"
+author: "AgentBuddy"
 license: "MIT"          # SPDX 标识
 keywords: [<kw1>, <kw2>]    # 发现标签（3-7 个）
 categories: [<cat>]     # 分类枚举：coding/frontend/backend/fullstack/embedded/testing/security/devops/ai/office/browser/database/documentation/other
 
-# ============ AdeBuddy 扩展字段（多 IDE 同步能力）============
+# ============ AgentBuddy 扩展字段（多 IDE 同步能力）============
 
 # MCP 服务声明（可选，从可用 MCP 列表中选择）
 mcpServers:

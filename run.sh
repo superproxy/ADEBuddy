@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AdeBuddy 配置工具桌面启动器 (Linux/macOS, pywebview 优先)
+# AgentBuddy 配置工具桌面启动器 (Linux/macOS, pywebview 优先)
 # 用法: ./run.sh [port] [--no-webview]
 
 set -e

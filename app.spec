@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for AdeBuddy desktop app.
+"""PyInstaller spec for AgentBuddy desktop app.
 
 安全边界（关键）：
   - agents/mcp/mcp.yaml、agents/llm/llm.yaml 含真实 API Key，绝不打包进 bundle
@@ -102,7 +102,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='AdeBuddy',
+    name='AgentBuddy',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -128,13 +128,13 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='AdeBuddy',
+    name='AgentBuddy',
 )
 
 # macOS: 生成标准 .app bundle（BUNDLE 仅在 macOS 生效，Windows/Linux 自动忽略）
 app = BUNDLE(
     coll,
-    name='AdeBuddy.app',
+    name='AgentBuddy.app',
     icon=(
         os.path.join(SPECPATH, 'assets', 'app.icns')
         if os.path.isfile(os.path.join(SPECPATH, 'assets', 'app.icns'))
@@ -142,8 +142,8 @@ app = BUNDLE(
     ),
     bundle_identifier='com.agentbuddy.app',
     info_plist={
-        'CFBundleName': 'AdeBuddy',
-        'CFBundleDisplayName': 'AdeBuddy',
+        'CFBundleName': '虎翼',
+        'CFBundleDisplayName': '虎翼',
         'CFBundleShortVersionString': '1.0.0',
         'CFBundleVersion': '1.0.0',
         'NSHighResolutionCapable': True,

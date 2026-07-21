@@ -1,4 +1,4 @@
-# AdeBuddy — Agent 治理体系
+# AgentBuddy — Agent 治理体系
 
 ## Agent 架构拓扑
 6 角色，详见 `agents/harness.yaml`：

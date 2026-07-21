@@ -79,7 +79,7 @@ def create_marketplace_bp(
             plugin_name = cfg.get("name", path.stem)
             version = cfg.get("version", "1.0.0").strip() or "1.0.0"
             description = cfg.get("description", "").strip()
-            author = cfg.get("author", "AdeBuddy").strip() or "AdeBuddy"
+            author = cfg.get("author", "AgentBuddy").strip() or "AgentBuddy"
             skill_dirs = collect_plugin_skill_dirs(cfg)
 
             # 生成完整智能体 zip

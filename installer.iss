@@ -1,8 +1,8 @@
-; AdeBuddy Inno Setup script
+; AgentBuddy Inno Setup script
 ; 构建: ISCC.exe installer.iss
-; 输出: dist\installer\AdeBuddy-Setup-<version>-x64.exe
+; 输出: dist\installer\AgentBuddy-Setup-<version>-x64.exe
 ;
-; 依赖: dist\AdeBuddy\ (由 build.py 产出)
+; 依赖: dist\AgentBuddy\ (由 build.py 产出)
 
 #ifndef APP_VERSION
   #define APP_VERSION "1.0.0"
@@ -12,26 +12,26 @@
 #endif
 
 [Setup]
-AppName=AdeBuddy
+AppName=虎翼
 AppVersion={#APP_VERSION}
-AppPublisher=AdeBuddy
+AppPublisher=AgentBuddy
 AppPublisherURL=https://github.com/superproxy/MyAgentPlugin
 AppSupportURL=https://github.com/superproxy/MyAgentPlugin/issues
 AppUpdatesURL=https://github.com/superproxy/MyAgentPlugin/releases
-AppComments=AdeBuddy - 多 IDE Agent 配置工具
-DefaultDirName={autopf}\AdeBuddy
-DefaultGroupName=AdeBuddy
+AppComments=虎翼 - 多 IDE Agent 配置工具
+DefaultDirName={autopf}\AgentBuddy
+DefaultGroupName=AgentBuddy
 DisableProgramGroupPage=yes
 OutputDir=dist\installer
-OutputBaseFilename=AdeBuddy-Setup-{#APP_VERSION}-{#APP_ARCH}
+OutputBaseFilename=AgentBuddy-Setup-{#APP_VERSION}-{#APP_ARCH}
 Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesAllowed=win64
 ArchitecturesInstallIn64BitMode=win64
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-UninstallDisplayIcon={app}\AdeBuddy.exe
-UninstallDisplayName=AdeBuddy {#APP_VERSION}
+UninstallDisplayIcon={app}\AgentBuddy.exe
+UninstallDisplayName=AgentBuddy {#APP_VERSION}
 WizardStyle=modern
 DisableWelcomePage=no
 DisableReadyPage=no
@@ -53,16 +53,16 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 0,6.1
 
 [Files]
-; 整个 AdeBuddy 目录递归打包（含 exe + _internal）
-Source: "dist\AdeBuddy\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 整个 AgentBuddy 目录递归打包（含 exe + _internal）
+Source: "dist\AgentBuddy\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\AdeBuddy"; Filename: "{app}\AdeBuddy.exe"
-Name: "{group}\卸载 AdeBuddy"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\AdeBuddy"; Filename: "{app}\AdeBuddy.exe"; Tasks: desktopicon
+Name: "{group}\AgentBuddy"; Filename: "{app}\AgentBuddy.exe"
+Name: "{group}\卸载 AgentBuddy"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\AgentBuddy"; Filename: "{app}\AgentBuddy.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\AdeBuddy.exe"; Description: "{cm:LaunchProgram,AdeBuddy}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\AgentBuddy.exe"; Description: "{cm:LaunchProgram,AgentBuddy}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; 卸载时清理用户配置（可选，默认保留）

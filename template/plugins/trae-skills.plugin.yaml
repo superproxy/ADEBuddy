@@ -1,7 +1,7 @@
 name: trae-skills
 version: 1.0.0
 description: Trae 研发场景十大热门 Skill 推荐 - 覆盖前端设计、前后端开发、代码审查、自动化测试、CI/CD、问题修复与文档维护
-author: AdeBuddy
+author: AgentBuddy
 license: MIT
 keywords: [trae, skills, frontend, code-review, testing, ci-cd]
 categories: [coding, frontend]

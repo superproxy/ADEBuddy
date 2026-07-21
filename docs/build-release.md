@@ -1,4 +1,4 @@
-# AdeBuddy — 构建、发布与运维
+# AgentBuddy — 构建、发布与运维
 
 ## 发布流程（Release）
 - **触发机制**：打 git tag `v<version>` 并推送 origin → GitHub Actions 自动构建 macOS + Windows 并发布 Release
@@ -27,24 +27,24 @@
 ### 保留 vs 替换矩阵
 | 目录/文件 | 升级时 | 机制 |
 |---|---|---|
-| `config/`（llm.yaml/mcp.yaml/ide 配置/含密钥） | **保留** | 不在安装包 `dist\AdeBuddy\` 内，安装器不触及；bootstrap `resources` 列表不含它 |
+| `config/`（llm.yaml/mcp.yaml/ide 配置/含密钥） | **保留** | 不在安装包 `dist\AgentBuddy\` 内，安装器不触及；bootstrap `resources` 列表不含它 |
 | `.agents/`（技能/插件安装目标） | **保留** | 同上，不在安装包内 |
-| `AdeBuddy.exe` + `_internal/` | **替换** | 安装器 `ignoreversion recursesubdirs` 覆盖到 `{app}` |
+| `AgentBuddy.exe` + `_internal/` | **替换** | 安装器 `ignoreversion recursesubdirs` 覆盖到 `{app}` |
 | `scripts/` `template/` `tools/` `AGENTS.md` | **替换** | bootstrap 每次启动从 `_internal/` 覆盖到顶层（`dirs_exist_ok=True`） |
 | `app.log` `.bundle_bootstrapped` | 替换/清理 | `[UninstallDelete]` 卸载时清理 |
 
 ### Windows（Inno Setup）
-- **安装器**：`installer.iss`，产物 `AdeBuddy-Setup-<version>-x64.exe`
+- **安装器**：`installer.iss`，产物 `AgentBuddy-Setup-<version>-x64.exe`
 - **升级方式**：装新版本时，若 Inno 提示"已检测到旧版本，是否替换"，**选择替换**
-  - 原理：`AppName=AdeBuddy` 固定、`DefaultDirName={autopf}\AdeBuddy` 固定路径，识别为同名升级
-  - `[Files]` 用 `ignoreversion recursesubdirs`，把 `dist\AdeBuddy\*`（仅 exe + `_internal/`）覆盖到 `{app}`；`config/`、`.agents/` 不在包内，自然保留
+  - 原理：`AppName=AgentBuddy` 固定、`DefaultDirName={autopf}\AgentBuddy` 固定路径，识别为同名升级
+  - `[Files]` 用 `ignoreversion recursesubdirs`，把 `dist\AgentBuddy\*`（仅 exe + `_internal/`）覆盖到 `{app}`；`config/`、`.agents/` 不在包内，自然保留
   - `[UninstallDelete]` 仅清 `app.log` 与 `.bundle_bootstrapped`，**不删 `config/`、`.agents/`**
 - **不要做的**：不要卸载后重装（权限/路径漂移）；不要装到并行目录（产生重复卸载项）
 
 ### macOS（dmg 目录覆盖）
-- **产物**：`AdeBuddy-<version>-macos.dmg`（`create-dmg` 生成，失败回退 `.zip`）
-- **升级**：挂载 `.dmg` → 将 `AdeBuddy/` 目录拖入 `/Applications` 覆盖旧版（普通目录覆盖，非 .app 包覆盖）
-- **配置保留**：`config/` 和 `.agents/` 在 `AdeBuddy/` 目录内，dmg 里不含这俩目录，拖拽覆盖不删除已存在文件
+- **产物**：`AgentBuddy-<version>-macos.dmg`（`create-dmg` 生成，失败回退 `.zip`）
+- **升级**：挂载 `.dmg` → 将 `AgentBuddy/` 目录拖入 `/Applications` 覆盖旧版（普通目录覆盖，非 .app 包覆盖）
+- **配置保留**：`config/` 和 `.agents/` 在 `AgentBuddy/` 目录内，dmg 里不含这俩目录，拖拽覆盖不删除已存在文件
 - **Gatekeeper**：首次启动若被拦截，右键 → 打开 → 确认（未签名时的标准处理）
 
 ### Bootstrap 覆盖机制（app.py `_bootstrap_from_bundle`）

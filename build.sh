@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AdeBuddy 完整构建脚本（前端 + 后端 + PyInstaller 打包）
+# AgentBuddy 完整构建脚本（前端 + 后端 + PyInstaller 打包）
 # 用法: ./build.sh [--windowed] [--clean] [--no-frontend] [--no-verify] [--version 1.0.0]
 set -e
 
@@ -35,7 +35,7 @@ for arg in "$@"; do
   esac
 done
 
-info "AdeBuddy 完整构建 (platform=$(uname -s))"
+info "AgentBuddy 完整构建 (platform=$(uname -s))"
 
 # ===== 1. 前端构建（Vue 3 + Vite -> tools/dist-ui）=====
 if [ "$NO_FRONTEND" = false ]; then
@@ -79,13 +79,13 @@ if [ "$NO_VERIFY" = true ]; then BUILD_ARGS="$BUILD_ARGS --no-verify"; fi
 if [ "$NO_INSTALLER" = true ]; then BUILD_ARGS="$BUILD_ARGS --no-installer"; fi
 BUILD_ARGS="$BUILD_ARGS --version $VERSION"
 "$PY" build.py $BUILD_ARGS || fail "PyInstaller 打包失败"
-info "后端打包完成: dist/AdeBuddy/"
+info "后端打包完成: dist/AgentBuddy/"
 
 # ===== 4. 验证前端产物已进 bundle =====
 info "步骤 4/4: 验证前端产物..."
-BUNDLE_TOOLS="dist/AdeBuddy/_internal/tools"
+BUNDLE_TOOLS="dist/AgentBuddy/_internal/tools"
 if [ ! -d "$BUNDLE_TOOLS/dist-ui" ]; then
-  BUNDLE_TOOLS="dist/AdeBuddy/tools"
+  BUNDLE_TOOLS="dist/AgentBuddy/tools"
 fi
 if [ -f "$BUNDLE_TOOLS/dist-ui/index.html" ]; then
   info "前端产物已进 bundle: $BUNDLE_TOOLS/dist-ui/index.html"
@@ -97,6 +97,6 @@ echo ""
 info "========================================"
 info "  构建完成！"
 info "========================================"
-info "  产物目录: dist/AdeBuddy/"
-info "  启动:     dist/AdeBuddy/AdeBuddy"
+info "  产物目录: dist/AgentBuddy/"
+info "  启动:     dist/AgentBuddy/AgentBuddy"
 echo ""

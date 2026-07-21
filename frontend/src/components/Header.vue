@@ -161,11 +161,11 @@ onBeforeUnmount(() => {
                    grid place-items-center font-bold text-[17px] tracking-tight"
             aria-hidden="true"
           >
-            A
+            虎
           </div>
           <div class="min-w-0">
             <h1 class="text-[15px] font-bold tracking-tight leading-tight whitespace-nowrap" style="color: var(--text-primary)">
-              AdeBuddy 配置工具
+              虎翼
             </h1>
             <div class="flex items-center gap-1.5 mt-1">
               <!-- 版本胶囊：发光状态点 + 版本号，点击检查/打开升级 -->
@@ -304,7 +304,7 @@ onBeforeUnmount(() => {
             <!-- 错误 -->
             <div v-else-if="upgrade.info && !upgrade.info.ok" class="upgrade-error">
               <p>检查失败：{{ upgrade.info.error || '未知错误' }}</p>
-              <a :href="upgrade.info.releaseUrl || 'https://github.com/superproxy/AdeBuddy/releases'" target="_blank" rel="noopener">
+              <a :href="upgrade.info.releaseUrl || 'https://github.com/superproxy/AgentBuddy/releases'" target="_blank" rel="noopener">
                 手动查看 GitHub Releases →
               </a>
             </div>
@@ -312,7 +312,7 @@ onBeforeUnmount(() => {
             <!-- 开发模式 -->
             <div v-else-if="upgrade.info && upgrade.info.current === 'dev'" class="upgrade-dev">
               <p>开发模式（未读取到 version.json），跳过升级检查。</p>
-              <a href="https://github.com/superproxy/AdeBuddy/releases" target="_blank" rel="noopener">
+              <a href="https://github.com/superproxy/AgentBuddy/releases" target="_blank" rel="noopener">
                 查看 GitHub Releases →
               </a>
             </div>

@@ -1,7 +1,7 @@
 name: arch
 version: 1.0.0
 description: 架构与生产力插件 - 提供需求分析、任务规划、项目管理、Superpowers 完整技能集
-author: AdeBuddy
+author: AgentBuddy
 license: MIT
 keywords: [architecture, prd, task-planning, project-management]
 categories: [documentation, coding]

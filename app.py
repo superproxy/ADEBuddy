@@ -1,4 +1,4 @@
-"""AdeBuddy 配置工具 - pywebview 桌面启动器。
+"""虎翼 - pywebview 桌面启动器。
 
 在后台线程启动 Flask 服务，前台用 pywebview 打开嵌入窗口。
 - 默认窗口 1400x900，最小 1000x680
@@ -73,12 +73,12 @@ def _resolve_project_root() -> Path:
     """Frozen-aware：dev 用 __file__ 上级，frozen 用 exe 所在目录。
 
     macOS .app bundle 安装到 /Applications 后，exe 所在目录不可写
-    （root 权限），改用 ~/Library/Application Support/AdeBuddy/ 作为
+    （root 权限），改用 ~/Library/Application Support/AgentBuddy/ 作为
     用户数据目录（config/、.agents/ 等可写资源均落在此处）。
     """
     if getattr(sys, "frozen", False):
         if sys.platform == "darwin":
-            data_root = Path.home() / "Library" / "Application Support" / "AdeBuddy"
+            data_root = Path.home() / "Library" / "Application Support" / "AgentBuddy"
             data_root.mkdir(parents=True, exist_ok=True)
             return data_root
         return Path(sys.executable).parent
@@ -104,7 +104,7 @@ def _redirect_stdio_to_log(project_root: Path) -> None:
             sys.stdout = log_fp
         if not err_is_tty:
             sys.stderr = log_fp
-        print(f"\n===== AdeBuddy 启动 {time.strftime('%Y-%m-%d %H:%M:%S')} =====")
+        print(f"\n===== AgentBuddy 启动 {time.strftime('%Y-%m-%d %H:%M:%S')} =====")
     except Exception:
         pass  # 重定向失败也不阻塞启动
 
@@ -204,7 +204,7 @@ def _bootstrap_from_bundle() -> None:
 
     平台差异：
     - Windows/Linux: PROJECT_ROOT == exe 所在目录（可写），用 dirs_exist_ok 合并覆盖
-    - macOS: PROJECT_ROOT == ~/Library/Application Support/AdeBuddy/（可写），
+    - macOS: PROJECT_ROOT == ~/Library/Application Support/AgentBuddy/（可写），
       .app bundle 内源文件为 root 只读，需先删旧只读目录再拷贝，拷贝后 chmod 设可写
 
     程序资源（scripts/template/tools/AGENTS.md）每次启动用 bundle 新版本覆盖；
@@ -435,7 +435,7 @@ def _osascript_to_posix(raw: str) -> str:
     return ""
 
 
-def open_with_pywebview(url: str, title: str = "AdeBuddy 配置工具", width: int = 1400, height: int = 900) -> bool:
+def open_with_pywebview(url: str, title: str = "虎翼", width: int = 1400, height: int = 900) -> bool:
     """用 pywebview 打开窗口，成功返回 True。"""
     try:
         import webview  # type: ignore
@@ -455,7 +455,7 @@ def open_with_pywebview(url: str, title: str = "AdeBuddy 配置工具", width: i
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AdeBuddy 配置工具 (pywebview 桌面版)")
+    parser = argparse.ArgumentParser(description="虎翼 (pywebview 桌面版)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--no-webview", action="store_true", help="不使用 pywebview，回退到系统浏览器")

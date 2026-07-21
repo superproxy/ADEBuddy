@@ -25,7 +25,7 @@ HTTP_TIMEOUT = 12
 GLAMA_TIMEOUT = (5, 18)
 REPO_FETCH_TIMEOUT = (5, 12)
 # PulseMCP 对部分 UA / 并行请求不稳定，使用浏览器式 UA
-USER_AGENT = "AdeBuddy/1.0"
+USER_AGENT = "AgentBuddy/1.0"
 HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
 MODELSCOPE_LIST_API = "https://www.modelscope.cn/openapi/v1/mcp/servers"
@@ -327,7 +327,7 @@ def _normalize_ms_server_cfg(cfg: Dict[str, Any]) -> Dict[str, Any]:
     if transport and "type" not in out:
         if transport in ("sse", "http", "streamable-http", "streamablehttp"):
             out["type"] = "sse" if transport == "sse" else "streamableHttp"
-    # AdeBuddy 模板不需要该浏览器专用字段
+    # AgentBuddy 模板不需要该浏览器专用字段
     out.pop("useNodeEventSource", None)
     return out
 

@@ -1,4 +1,4 @@
-# AdeBuddy 平台服务
+# AgentBuddy 平台服务
 
 ## 目录结构
 

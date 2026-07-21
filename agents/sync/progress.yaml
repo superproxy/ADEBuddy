@@ -1,6 +1,6 @@
 # 协同进度看板
 version: "1.0"
-project: "AdeBuddy"
+project: "AgentBuddy"
 updated_at: "2026-07-06T00:00:00Z"
 
 active_workflows: []

@@ -1,4 +1,4 @@
-# AdeBuddy — 项目结构与技术
+# AgentBuddy — 项目结构与技术
 
 ## 项目定位
 - **项目目标**：把 agents/ 共享配置（LLM/MCP/Skills/Rules）一键映射到多 IDE 的桌面工具

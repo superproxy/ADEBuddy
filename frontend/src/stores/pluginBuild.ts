@@ -27,7 +27,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
   const env = useEnvStore()
   const plugin = usePluginStore()
 
-  const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'AdeBuddy', install_script: '' })
+  const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'AgentBuddy', install_script: '' })
   // 已加载插件的标准元数据（load → edit → save 时保留，避免丢失 license/keywords/categories 等字段）
   const loadedMeta = ref<Record<string, any>>({})
   const selectedSkills = ref<string[]>([])
@@ -83,7 +83,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
   function newPlugin() {
     plugin.selectedPluginFile = ''
     pluginForm.name = ''; pluginForm.version = '1.0.0'; pluginForm.description = ''
-    pluginForm.author = 'AdeBuddy'; pluginForm.install_script = ''
+    pluginForm.author = 'AgentBuddy'; pluginForm.install_script = ''
     loadedMeta.value = {}
     selectedSkills.value = []; selectedMcp.value = []; selectedLlm.value = []
     selectedSubagents.value = []; selectedRules.value = []; selectedCommands.value = []
@@ -162,7 +162,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     if (!r.ok) { ui.toast('加载失败: ' + r.error, 'err'); return }
     const d = r.data
     pluginForm.name = d.name || ''; pluginForm.version = d.version || '1.0.0'
-    pluginForm.description = d.description || ''; pluginForm.author = d.author || 'AdeBuddy'
+    pluginForm.description = d.description || ''; pluginForm.author = d.author || 'AgentBuddy'
     // 兼容 scripts.install（新格式 npm 生命周期）/ scripts.init（旧格式，等价 postinstall）
     pluginForm.install_script = (d.scripts && (d.scripts.install || d.scripts.postinstall || d.scripts.init)) || ''
     selectedSkills.value = [...(d.skills || [])].map((s:any) => typeof s === 'string' ? s : s.name || s.skill || '')
@@ -205,7 +205,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     })
     return {
       name: pluginForm.name.trim(), version: pluginForm.version.trim() || '1.0.0',
-      description: pluginForm.description.trim(), author: pluginForm.author.trim() || 'AdeBuddy',
+      description: pluginForm.description.trim(), author: pluginForm.author.trim() || 'AgentBuddy',
       ...loadedMeta.value,  // 保留 license/keywords/categories/homepage/repository 等标准字段
       mcpServers: Object.fromEntries(selectedMcp.value.map(n => [n, mcp.mcpTemplate.mcpServers[n]])),
       skills: skillsOut, llm: llmList,

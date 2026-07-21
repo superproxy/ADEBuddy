@@ -1,4 +1,4 @@
-# AdeBuddy 平台服务依赖
+# AgentBuddy 平台服务依赖
 # AI 插件生成服务需要 openai SDK（兼容 OpenAI/Anthropic/火山引擎等）
 openai>=1.0.0
 

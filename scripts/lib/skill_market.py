@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import requests
 
 HTTP_TIMEOUT = 12
-USER_AGENT = "AdeBuddy/1.0"
+USER_AGENT = "AgentBuddy/1.0"
 HEADERS = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
 MODELSCOPE_SKILLS_API = "https://www.modelscope.cn/openapi/v1/skills"

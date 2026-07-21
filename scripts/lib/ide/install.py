@@ -456,7 +456,7 @@ IDE_INSTALL_META = {
         "install_methods": ["app"],
     },
     "ZCode": {
-        # 智谱 ADE ZCode（AdeBuddy/ZCode 智能体编程平台）
+        # 智谱 ADE ZCode（AgentBuddy/ZCode 智能体编程平台）
         # 最新版本：3.0+
         # 来源：https://zcode.z.ai/cn
         "label": "ZCode",

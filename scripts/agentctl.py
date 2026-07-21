@@ -41,11 +41,11 @@ def _resolve_project_root() -> Path:
     """Frozen-aware 项目根定位。
 
     macOS .app bundle 安装到 /Applications 后不可写，
-    改用 ~/Library/Application Support/AdeBuddy/。
+    改用 ~/Library/Application Support/AgentBuddy/。
     """
     if getattr(sys, "frozen", False):
         if sys.platform == "darwin":
-            data_root = Path.home() / "Library" / "Application Support" / "AdeBuddy"
+            data_root = Path.home() / "Library" / "Application Support" / "AgentBuddy"
             data_root.mkdir(parents=True, exist_ok=True)
             return data_root
         return Path(sys.executable).parent

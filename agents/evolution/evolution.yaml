@@ -1,6 +1,6 @@
 # 自我迭代与沉淀机制
 version: "1.0"
-project: "AdeBuddy"
+project: "AgentBuddy"
 
 iteration:
   small_step:

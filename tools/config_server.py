@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AdeBuddy 配置工具 Web UI 后端
+虎翼 Web UI 后端
 
 启动: python tools/config_server.py
 访问: http://127.0.0.1:5050
@@ -28,11 +28,11 @@ def _resolve_project_root() -> Path:
     - dev: 仓库根（tools/config_server.py 的上两级）
     - frozen (PyInstaller onedir): exe 所在目录（_MEIPASS == exe dir，可写）
     - macOS .app bundle: exe 在 /Applications 下不可写，改用
-      ~/Library/Application Support/AdeBuddy/ 作为用户数据目录
+      ~/Library/Application Support/AgentBuddy/ 作为用户数据目录
     """
     if getattr(sys, "frozen", False):
         if sys.platform == "darwin":
-            data_root = Path.home() / "Library" / "Application Support" / "AdeBuddy"
+            data_root = Path.home() / "Library" / "Application Support" / "AgentBuddy"
             data_root.mkdir(parents=True, exist_ok=True)
             return data_root
         return Path(sys.executable).parent
@@ -433,7 +433,7 @@ def api_version():
 # ============================================================
 # 升级检查 API
 # ============================================================
-GITHUB_REPO = "superproxy/AdeBuddy"
+GITHUB_REPO = "superproxy/AgentBuddy"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases"
 
@@ -467,8 +467,8 @@ def upgrade_check():
         "release_notes": "...",  # release body（markdown）
         "published_at": "2026-...",
         "downloads": [
-          {"platform": "windows", "filename": "AdeBuddy-Setup-1.11.0-x64.exe", "url": "...", "size": 12345678},
-          {"platform": "macos", "filename": "AdeBuddy-1.11.0-macos.pkg", "url": "...", "size": 23456789}
+          {"platform": "windows", "filename": "AgentBuddy-Setup-1.11.0-x64.exe", "url": "...", "size": 12345678},
+          {"platform": "macos", "filename": "AgentBuddy-1.11.0-macos.pkg", "url": "...", "size": 23456789}
         ]
       }
 
@@ -504,7 +504,7 @@ def upgrade_check():
             GITHUB_RELEASES_API,
             headers={
                 "Accept": "application/vnd.github+json",
-                "User-Agent": "AdeBuddy-Updater/1.0",
+                "User-Agent": "AgentBuddy-Updater/1.0",
             },
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -1228,8 +1228,8 @@ def apply_keys_to_env():
             applied.append({"key": k, "value": value})
 
         if lines_to_write:
-            marker_begin = "# >>> AdeBuddy env >>>"
-            marker_end = "# <<< AdeBuddy env <<<"
+            marker_begin = "# >>> AgentBuddy env >>>"
+            marker_end = "# <<< AgentBuddy env <<<"
             try:
                 old = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
             except Exception:
@@ -1261,8 +1261,8 @@ def apply_keys_to_env():
             applied.append({"key": k, "value": value})
 
         if lines_to_write:
-            marker_begin = "# >>> AdeBuddy env >>>"
-            marker_end = "# <<< AdeBuddy env <<<"
+            marker_begin = "# >>> AgentBuddy env >>>"
+            marker_end = "# <<< AgentBuddy env <<<"
             try:
                 old = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
             except Exception:
@@ -2144,7 +2144,7 @@ def save_plugin():
     name = body.get("name", "").strip()
     if not name:
         return jsonify({"ok": False, "error": "name 必填"}), 400
-    # 保留所有传入字段（标准字段 + AdeBuddy 扩展字段），避免丢弃 license/keywords/categories 等
+    # 保留所有传入字段（标准字段 + AgentBuddy 扩展字段），避免丢弃 license/keywords/categories 等
     config: dict = {}
     # 标准字段（对齐 Claude Code / Codex CLI / VSCode）
     for k in ("$schema", "manifest_version", "name", "version", "description", "author",
@@ -2157,8 +2157,8 @@ def save_plugin():
     config["name"] = name
     config["version"] = (body.get("version", "1.0.0") or "1.0.0").strip()
     if "author" not in config:
-        config["author"] = (body.get("author", "AdeBuddy") or "AdeBuddy").strip()
-    # AdeBuddy 扩展字段（多 IDE 同步能力）
+        config["author"] = (body.get("author", "AgentBuddy") or "AgentBuddy").strip()
+    # AgentBuddy 扩展字段（多 IDE 同步能力）
     for k in ("mcpServers", "skills", "llm", "subagents", "rules", "commands"):
         if k in body:
             config[k] = body[k] if body[k] is not None else ([] if k in ("skills", "llm", "subagents", "rules", "commands") else {})
@@ -3619,7 +3619,7 @@ def api_ide_session_import():
 # Main
 # ============================================================
 def main():
-    parser = argparse.ArgumentParser(description="AdeBuddy 配置工具 Web UI")
+    parser = argparse.ArgumentParser(description="虎翼 Web UI")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
@@ -4035,7 +4035,7 @@ def _ensure_hooks_file() -> Path:
         shutil.copy2(HOOKS_EXAMPLE, HOOKS_FILE)
     else:
         HOOKS_FILE.write_text(
-            json.dumps({"description": "AdeBuddy Hooks 配置", "hooks": {}}, indent=2, ensure_ascii=False) + "\n",
+            json.dumps({"description": "AgentBuddy Hooks 配置", "hooks": {}}, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
     return HOOKS_FILE
