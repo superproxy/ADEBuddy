@@ -104,14 +104,25 @@ export const useIdeStore = defineStore('ide', () => {
   })
 
   // ===== 函数 =====
-  /** 直接下载（不跳转新窗口）：用 <a download> 触发，浏览器处理 */
+  /** 打开外部 URL（下载页/官网等）。
+   * pywebview 桌面模式下 window.open / <a download> 对外部 URL 均无效，
+   * 走 JS-Python 桥接调用系统默认浏览器打开；浏览器模式回退 window.open。
+   */
+  async function openExternal(url?: string) {
+    if (!url) return
+    const pw = (window as any).pywebview
+    if (pw?.api?.open_external) {
+      try {
+        await pw.api.open_external(url)
+        return
+      } catch { /* 回退 */ }
+    }
+    window.open(url, '_blank')
+  }
+
+  /** 兼容旧调用名：打开外部下载页 */
   function downloadUrl(url: string) {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = ''
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    openExternal(url)
   }
 
   async function loadIdeDetect() {
@@ -479,5 +490,6 @@ export const useIdeStore = defineStore('ide', () => {
     exportSession,
     openShareModal,
     importSession,
+    openExternal,
   }
 })

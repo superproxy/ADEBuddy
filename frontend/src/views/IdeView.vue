@@ -22,7 +22,7 @@ const { dragIdeKey, dragOverIdeKey } = storeToRefs(sync)
 const {
   loadIdeDetect, launchIde, installIde, uninstallIde, reinstallIde, openIdeConfig,
   syncIdeConfig, toggleIdeSessions, closeSessionDrawer, toggleIdeCard, setIdeCardTab, exportSession,
-  openShareModal, importSession,
+  openShareModal, importSession, openExternal,
 } = ide
 const { onIdeDragStart, onIdeDragOver, onIdeDrop, onIdeDragEnd } = sync
 
@@ -492,10 +492,10 @@ onMounted(() => {
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
               {{ ideInstalling === busyKey(currentSelectedIde) ? '...' : '安装' }}
             </button>
-            <a v-else-if="currentInfo(currentSelectedIde)?.url" :href="currentInfo(currentSelectedIde).url" target="_blank" class="dock-item">下载</a>
+            <a v-else-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openExternal(currentInfo(currentSelectedIde).url)" class="dock-item">下载</a>
             <button v-if="currentSelectedIde.config_paths?.length" @click="openIdeConfig(currentSelectedIde.key)" :disabled="ideOpeningConfig === currentSelectedIde.key" class="dock-item" type="button">{{ ideOpeningConfig === currentSelectedIde.key ? '...' : '配置' }}</button>
           </template>
-          <a v-if="ideInstallInfo[currentSelectedIde.key]?.homepage" :href="ideInstallInfo[currentSelectedIde.key].homepage" target="_blank" class="dock-item">官网</a>
+          <a v-if="ideInstallInfo[currentSelectedIde.key]?.homepage" href="javascript:void(0)" @click.prevent="openExternal(ideInstallInfo[currentSelectedIde.key].homepage)" class="dock-item">官网</a>
           <button @click="toggleIdeCard(currentSelectedIde.key)" class="dock-item close" type="button" title="关闭">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
