@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
+import * as yaml from 'js-yaml'
 import { api } from '../api/client'
 import { runSse } from '../api/sse'
 import { useUiStore } from './ui'
@@ -305,6 +306,77 @@ export const useMcpStore = defineStore('mcp', () => {
     await api('/api/mcp/save', { method: 'POST', body: JSON.stringify({ data: mcpTemplate }) })
     ui.toast(enabled ? '已全部启用' : '已全部禁用')
   }
+  /** 批量切换指定名称的启用状态（基于勾选） */
+  async function toggleMcpList(names: string[], enabled: boolean) {
+    if (!names.length) { ui.toast('请先勾选服务', 'warn'); return }
+    for (const name of names) {
+      if (mcpTemplate.mcpServers[name]) mcpTemplate.mcpServers[name].disabled = !enabled
+    }
+    await api('/api/mcp/save', { method: 'POST', body: JSON.stringify({ data: mcpTemplate }) })
+    ui.toast(enabled ? `已启用 ${names.length} 个` : `已禁用 ${names.length} 个`)
+  }
+  /** 删除多个服务（基于勾选） */
+  async function deleteMcpList(names: string[]) {
+    if (!names.length) { ui.toast('请先勾选服务', 'warn'); return }
+    const ok = await ui.askConfirm({
+      title: `删除 ${names.length} 个服务？`,
+      message: '将从已配置中移除，此操作不可撤销。',
+      detail: names.join(' · '),
+      confirmText: '确认删除',
+      tone: 'danger',
+    })
+    if (!ok) return
+    for (const name of names) delete mcpTemplate.mcpServers[name]
+    await api('/api/mcp/save', { method: 'POST', body: JSON.stringify({ data: mcpTemplate }) })
+    ui.toast(`已删除 ${names.length} 个`)
+  }
+  /** 导入文本：自动识别 JSON / YAML，支持 { mcpServers: {...} } 或直接 {...} */
+  async function importMcp(text: string, mode: 'merge' | 'overwrite' = 'merge') {
+    const raw = text.trim()
+    if (!raw) { ui.toast('请输入或粘贴配置', 'warn'); return { ok: false, added: 0, skipped: 0 } }
+    let parsed: any = null
+    // 1) 尝试 JSON
+    try { parsed = JSON.parse(raw) }
+    catch {
+      // 2) 尝试 YAML
+      try { parsed = yaml.load(raw) }
+      catch (e: any) { ui.toast('解析失败（JSON/YAML 均无效）: ' + e.message, 'err'); return { ok: false, added: 0, skipped: 0 } }
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      ui.toast('配置格式不正确', 'err'); return { ok: false, added: 0, skipped: 0 }
+    }
+    // 提取 mcpServers：支持 { mcpServers: {...} } 或直接 { name: {...} }
+    let servers: Record<string, any> = {}
+    if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
+      servers = parsed.mcpServers
+    } else {
+      // 直接是 key->cfg 结构
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v && typeof v === 'object') servers[k] = v
+      }
+    }
+    const keys = Object.keys(servers)
+    if (!keys.length) { ui.toast('未发现任何 mcpServers 条目', 'warn'); return { ok: false, added: 0, skipped: 0 } }
+
+    if (mode === 'overwrite') {
+      // 清空再合并
+      Object.keys(mcpTemplate.mcpServers).forEach((k) => delete mcpTemplate.mcpServers[k])
+    }
+    let added = 0
+    let skipped = 0
+    for (const k of keys) {
+      if (mode === 'merge' && mcpTemplate.mcpServers[k]) { skipped++; continue }
+      mcpTemplate.mcpServers[k] = servers[k]
+      added++
+    }
+    const r = await api('/api/mcp/save', { method: 'POST', body: JSON.stringify({ data: mcpTemplate }) })
+    if (r.ok) {
+      ui.toast(`已导入 ${added} 个${skipped ? ` · 跳过 ${skipped} 个已存在` : ''}`)
+    } else {
+      ui.toast('保存失败: ' + r.error, 'err')
+    }
+    return { ok: r.ok, added, skipped }
+  }
   async function saveMcpAll(silent = false) {
     const r1 = await api('/api/mcp/save', { method: 'POST', body: JSON.stringify({ data: mcpTemplate }) })
     const r2 = await api('/api/mcp-config', { method: 'POST', body: JSON.stringify({ data: mcpConfigData }) })
@@ -421,7 +493,7 @@ export const useMcpStore = defineStore('mcp', () => {
     loadMcpCatalog, loadMcpConfig, loadPulseMcpStatus, searchMcpMarket, toggleMarketSource,
     fetchMcpDetail, resolveMcpInstallConfig, getMcpDetail, addMarketMcpToTemplate,
     toggleMcpDisabled, deleteMcpEntry, saveMcpTemplate, generateMcpRuntime,
-    parsePastedMcp, addManualMcp, toggleAllMcp, saveMcpAll, syncMcpFull,
+    parsePastedMcp, addManualMcp, toggleAllMcp, toggleMcpList, deleteMcpList, importMcp, saveMcpAll, syncMcpFull,
     startEditMcp, cancelEditMcp, saveEditMcp, saveMcpConfig, addMcpConfigKey, deleteMcpConfigKey,
   }
 })
