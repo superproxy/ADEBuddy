@@ -2022,9 +2022,77 @@ def _add_dir_to_zip(zf: zipfile.ZipFile, src_dir: Path, arc_prefix: str) -> int:
     return count
 
 
-def _collect_plugin_llm(cfg: dict) -> str | None:
+def _strip_api_keys_deep(obj):
+    """深拷贝并将所有 api_key 字段置空（脱敏导出用）。"""
+    import copy
+    cloned = copy.deepcopy(obj)
+    def _walk(o):
+        if isinstance(o, dict):
+            for k, v in list(o.items()):
+                if k == "api_key" and isinstance(v, str):
+                    o[k] = ""
+                else:
+                    _walk(v)
+        elif isinstance(o, list):
+            for item in o:
+                _walk(item)
+    _walk(cloned)
+    return cloned
+
+
+_KEY_PLACEHOLDER_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^\}]*)?\}")
+_KEY_ENV_RE = re.compile(r"\benv:([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _find_referenced_keys(*texts: str) -> set:
+    """从多段文本中提取 ${KEY} 与 env:KEY 引用的密钥名集合。"""
+    refs: set[str] = set()
+    for text in texts:
+        if not text:
+            continue
+        for m in _KEY_PLACEHOLDER_RE.finditer(text):
+            refs.add(m.group(1))
+        for m in _KEY_ENV_RE.finditer(text):
+            refs.add(m.group(1))
+    return refs
+
+
+def _build_keys_yaml_for_export(referenced: set, include_values: bool) -> str | None:
+    """构建导出用 keys.yaml 内容（仅含被引用的密钥）。
+
+    include_values=True  → vault 模式，含密钥明文值
+    include_values=False → redacted 模式，值置空仅保留 key 名与描述
+    """
+    if not referenced:
+        return None
+    try:
+        full = _load_keys_full()
+    except Exception:
+        return None
+    all_keys = full.get("mcp", {}) if isinstance(full, dict) else {}
+    exported = {}
+    for k in sorted(referenced):
+        if k in all_keys and isinstance(all_keys[k], dict):
+            entry = all_keys[k]
+            if include_values:
+                exported[k] = {"value": entry.get("value", ""), "description": entry.get("description", "")}
+            else:
+                exported[k] = {"value": "", "description": entry.get("description", "")}
+        else:
+            exported[k] = {"value": "", "description": "（导出时缺失，请填写）"}
+    if not exported:
+        return None
+    import yaml as _yaml
+    return _yaml.dump({"mcp": exported}, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+
+def _collect_plugin_llm(cfg: dict, key_mode: str = "plain") -> str | None:
     """从 plugin.yaml 的 llm 列表中提取 provider 名，再从 llm.yaml 中提取对应配置（含 api_key）。
 
+    key_mode:
+      - plain: 原样导出（含 api_key 明文或 env: 引用）
+      - vault: 原样导出（引用保留，密钥值由 keys.yaml 单独导出）
+      - redacted: 脱敏导出（api_key 字段置空）
     返回 YAML 字符串（仅含声明的 provider），如无匹配返回 None。
     """
     llm_list = cfg.get("llm", []) or []
@@ -2055,7 +2123,10 @@ def _collect_plugin_llm(cfg: dict) -> str | None:
     found = False
     for pname in provider_names:
         if pname in llm_section and isinstance(llm_section[pname], dict):
-            extracted["llm"][pname] = llm_section[pname]
+            prov_cfg = llm_section[pname]
+            if key_mode == "redacted":
+                prov_cfg = _strip_api_keys_deep(prov_cfg)
+            extracted["llm"][pname] = prov_cfg
             found = True
     if not found:
         return None
@@ -2147,12 +2218,17 @@ def _collect_plugin_hooks(cfg: dict) -> Path | None:
     return None
 
 
-def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | None = None) -> None:
+def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | None = None,
+                             key_mode: str = "plain") -> None:
     """将 plugin 关联的 llm/subagents/rules/commands/hooks 打包到 zip。
 
     Args:
         seen: 多插件导出时传入的去重集合，避免 llm.yaml / subagents.yaml 等
               同名文件重复写入 zip。单插件导出不传（None）时跳过去重。
+        key_mode:
+          - plain: 原样导出 llm.yaml（含 api_key），不导出 keys.yaml
+          - vault: 原样导出 llm.yaml + keys.yaml（含被引用密钥的明文值）
+          - redacted: 脱敏 llm.yaml（api_key 置空）+ keys.yaml（仅结构与描述）
     """
     def _should_write(name: str) -> bool:
         if seen is None:
@@ -2163,7 +2239,7 @@ def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | N
         return True
 
     # llm.yaml
-    llm_yaml_str = _collect_plugin_llm(cfg)
+    llm_yaml_str = _collect_plugin_llm(cfg, key_mode)
     if llm_yaml_str and _should_write("llm.yaml"):
         zf.writestr("llm.yaml", llm_yaml_str)
 
@@ -2187,6 +2263,19 @@ def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | N
     hooks_path = _collect_plugin_hooks(cfg)
     if hooks_path and _should_write("hooks/hooks.json"):
         zf.write(hooks_path, arcname="hooks/hooks.json")
+
+    # 密钥库 keys.yaml：vault / redacted 模式下导出被引用的密钥
+    if key_mode in ("vault", "redacted"):
+        import yaml as _yaml
+        try:
+            mcp_text = _yaml.dump(cfg.get("mcpServers", {}), allow_unicode=True,
+                                  default_flow_style=False, sort_keys=False)
+        except Exception:
+            mcp_text = ""
+        refs = _find_referenced_keys(llm_yaml_str or "", mcp_text)
+        keys_yaml_str = _build_keys_yaml_for_export(refs, include_values=(key_mode == "vault"))
+        if keys_yaml_str and _should_write("keys/keys.yaml"):
+            zf.writestr("keys/keys.yaml", keys_yaml_str)
 
 
 @app.route("/api/plugins", methods=["GET"])
@@ -2321,6 +2410,9 @@ def export_plugin():
     """
     fname = (request.args.get("file") or "").strip()
     fmt = (request.args.get("format") or "zip").strip().lower()
+    key_mode = (request.args.get("key_mode") or "plain").strip().lower()
+    if key_mode not in ("plain", "vault", "redacted"):
+        key_mode = "plain"
     if not fname:
         return jsonify({"ok": False, "error": "缺少 file 参数"}), 400
     path = _resolve_plugin_path(fname)
@@ -2348,8 +2440,8 @@ def export_plugin():
             zf.write(path, arcname=fname)
             for skill_name, skill_dir in skill_dirs:
                 _add_dir_to_zip(zf, skill_dir, arc_prefix=f"skills/{skill_name}")
-            # 打包 llm/subagents/rules/commands/hooks
-            _add_plugin_extras_to_zip(zf, cfg)
+            # 打包 llm/subagents/rules/commands/hooks（+ 可选 keys.yaml）
+            _add_plugin_extras_to_zip(zf, cfg, key_mode=key_mode)
 
         buf.seek(0)
         safe_name = "".join(c for c in plugin_name if c.isalnum() or c in ("-", "_"))
@@ -2367,7 +2459,12 @@ def export_all_plugins():
     zip 结构：
       - *.plugin.yaml  （所有插件配置）
       - skills/<skill_name>/...  （去重后的所有本地 skill）
+    query:
+      - key_mode=plain|vault|redacted  （可选，默认 plain）
     """
+    key_mode = (request.args.get("key_mode") or "plain").strip().lower()
+    if key_mode not in ("plain", "vault", "redacted"):
+        key_mode = "plain"
     buf = io.BytesIO()
     seen_skills: set[str] = set()
     seen_files: set[str] = set()
@@ -2388,7 +2485,7 @@ def export_all_plugins():
                             continue
                         seen_skills.add(skill_name)
                         _add_dir_to_zip(zf, skill_dir, arc_prefix=f"skills/{skill_name}")
-                    _add_plugin_extras_to_zip(zf, cfg, seen_extras)
+                    _add_plugin_extras_to_zip(zf, cfg, seen_extras, key_mode=key_mode)
                 except Exception:
                     pass  # 单个插件解析失败不阻塞
     buf.seek(0)
@@ -2402,6 +2499,7 @@ def export_selected_plugins():
 
     query:
       - files=a.plugin.yaml&files=b.plugin.yaml  （必填，可重复）
+      - key_mode=plain|vault|redacted  （可选，默认 plain）
 
     zip 结构：
       - *.plugin.yaml  （选中的插件配置）
@@ -2410,6 +2508,9 @@ def export_selected_plugins():
     files = request.args.getlist("files")
     if not files:
         return jsonify({"ok": False, "error": "未选择任何插件"}), 400
+    key_mode = (request.args.get("key_mode") or "plain").strip().lower()
+    if key_mode not in ("plain", "vault", "redacted"):
+        key_mode = "plain"
 
     buf = io.BytesIO()
     seen_skills: set[str] = set()
@@ -2430,7 +2531,7 @@ def export_selected_plugins():
                         continue
                     seen_skills.add(skill_name)
                     _add_dir_to_zip(zf, skill_dir, arc_prefix=f"skills/{skill_name}")
-                _add_plugin_extras_to_zip(zf, cfg, seen_extras)
+                _add_plugin_extras_to_zip(zf, cfg, seen_extras, key_mode=key_mode)
             except Exception:
                 pass  # 单个插件解析失败不阻塞
     buf.seek(0)
@@ -2466,6 +2567,7 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
         rules_entries: list[tuple[str, bytes]] = []  # (rel_path, content)
         commands_content: bytes | None = None
         hooks_content: bytes | None = None
+        keys_content: bytes | None = None
 
         for info in zf.infolist():
             if info.is_dir():
@@ -2491,6 +2593,8 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                 rules_entries.append((rel, zf.read(name)))
             elif name == "hooks/hooks.json":
                 hooks_content = zf.read(name)
+            elif name in ("keys/keys.yaml", "keys.yaml"):
+                keys_content = zf.read(name)
 
         # 导入 plugin yaml
         # 同时收集所有插件的 envVars，统一合并到 keys.yaml（仅初始化未存在的变量）
@@ -2648,6 +2752,26 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                 imported_extras.append("hooks/hooks.json")
             except Exception as e:
                 skipped.append({"file": "hooks/hooks.json", "reason": str(e)})
+
+        # 导入 keys/keys.yaml → 合并到 config/keys/keys.yaml（不覆盖已有值）
+        if keys_content:
+            try:
+                imported_keys = yaml.safe_load(keys_content.decode("utf-8"))
+                if isinstance(imported_keys, dict) and isinstance(imported_keys.get("mcp"), dict):
+                    full = _load_keys_full()
+                    if not isinstance(full.get("mcp"), dict):
+                        full["mcp"] = {}
+                    added = 0
+                    for k, entry in imported_keys["mcp"].items():
+                        if k in full["mcp"] and isinstance(full["mcp"][k], dict) and full["mcp"][k].get("value"):
+                            continue  # 保留用户已配置的值
+                        full["mcp"][k] = _normalize_key_entry(entry)
+                        added += 1
+                    if added:
+                        _save_keys_full(full)
+                    imported_extras.append(f"keys/keys.yaml (+{added})")
+            except Exception as e:
+                skipped.append({"file": "keys/keys.yaml", "reason": str(e)})
 
     result = {
         "ok": True,

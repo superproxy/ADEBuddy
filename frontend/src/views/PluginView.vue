@@ -108,12 +108,57 @@ function selectVisible() {
 
 function triggerImport() { inputRef.value?.click() }
 
-function onExportBatch() {
+// ===== 导出选项弹窗 =====
+type KeyMode = 'plain' | 'vault' | 'redacted'
+type ExportTarget =
+  | { kind: 'batch' }
+  | { kind: 'single'; file: string; format: 'zip' | 'yaml' }
+const exportDialog = ref(false)
+const exportKeyMode = ref<KeyMode>('vault')
+const exportTarget = ref<ExportTarget | null>(null)
+
+function openExportBatch() {
   if (!selectedForExport.value.size) {
     ui.toast('请先勾选要导出的插件', 'warn')
     return
   }
-  exportSelectedPlugins()
+  exportTarget.value = { kind: 'batch' }
+  exportKeyMode.value = 'vault'
+  exportDialog.value = true
+}
+
+function openExportSingle(file: string, format: 'zip' | 'yaml') {
+  exportMenu.value = null
+  if (format === 'yaml') {
+    // yaml 仅导出 plugin.yaml，不涉及密钥，直接下载
+    exportPlugin(file, format, 'plain')
+    return
+  }
+  exportTarget.value = { kind: 'single', file, format }
+  exportKeyMode.value = 'vault'
+  exportDialog.value = true
+}
+
+function cancelExport() {
+  exportDialog.value = false
+  exportTarget.value = null
+}
+
+async function confirmExport() {
+  if (!exportTarget.value) return
+  const mode = exportKeyMode.value
+  const target = exportTarget.value
+  exportDialog.value = false
+  exportTarget.value = null
+  if (target.kind === 'batch') {
+    await exportSelectedPlugins(mode)
+  } else {
+    exportPlugin(target.file, target.format, mode)
+  }
+}
+
+function onExportBatch() {
+  openExportBatch()
 }
 
 async function batchInstall() {
@@ -155,8 +200,7 @@ function toggleExportMenu(file: string) {
 }
 
 function doExport(file: string, format: 'zip' | 'yaml') {
-  exportPlugin(file, format)
-  exportMenu.value = null
+  openExportSingle(file, format)
 }
 
 function onDocClick(e: MouseEvent) {
@@ -463,6 +507,46 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
         </div>
       </div>
     </Transition>
+
+    <!-- 导出选项弹窗 -->
+    <Transition name="modal-fade">
+      <div v-if="exportDialog" class="modal-mask" @click.self="cancelExport">
+        <div class="modal-card export-modal" role="dialog" aria-modal="true" aria-label="导出选项">
+          <header class="modal-head">
+            <h2>导出选项</h2>
+            <button type="button" class="modal-close" aria-label="关闭" @click="cancelExport">×</button>
+          </header>
+          <div class="modal-body">
+            <p class="modal-hint">选择密钥处理方式（影响 llm.yaml 与 keys.yaml）</p>
+            <label class="opt-row" :class="{ on: exportKeyMode === 'vault' }">
+              <input v-model="exportKeyMode" type="radio" value="vault">
+              <span class="opt-main">
+                <span class="opt-title">使用密钥库（推荐）</span>
+                <span class="opt-desc">llm.yaml 保留引用，额外导出 keys.yaml（含被引用密钥的真实值）。接收方导入后无需逐个填密码。</span>
+              </span>
+            </label>
+            <label class="opt-row" :class="{ on: exportKeyMode === 'plain' }">
+              <input v-model="exportKeyMode" type="radio" value="plain">
+              <span class="opt-main">
+                <span class="opt-title">含明文密码</span>
+                <span class="opt-desc">原样导出 llm.yaml（api_key 为明文或 env: 引用），不导出 keys.yaml。仅自用备份。</span>
+              </span>
+            </label>
+            <label class="opt-row" :class="{ on: exportKeyMode === 'redacted' }">
+              <input v-model="exportKeyMode" type="radio" value="redacted">
+              <span class="opt-main">
+                <span class="opt-title">脱敏导出</span>
+                <span class="opt-desc">llm.yaml 的 api_key 置空，keys.yaml 仅保留密钥名与描述。适合公开分享，接收方需自填密钥。</span>
+              </span>
+            </label>
+          </div>
+          <footer class="modal-foot">
+            <button type="button" class="btn btn-ghost" @click="cancelExport">取消</button>
+            <button type="button" class="btn btn-primary" @click="confirmExport">导出</button>
+          </footer>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -728,6 +812,51 @@ th.sortable.active .sort-ic.desc { transform: rotate(180deg); }
 .drop-card span { font-size: 12px; color: var(--text-tertiary); }
 .drop-fade-enter-active, .drop-fade-leave-active { transition: opacity .18s ease; }
 .drop-fade-enter-from, .drop-fade-leave-to { opacity: 0; }
+
+/* 导出选项弹窗 */
+.modal-mask {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, .32);
+  display: grid; place-items: center;
+  padding: 16px;
+}
+.modal-card {
+  width: 100%; max-width: 520px;
+  background: var(--bg-elevated); border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .28);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border-base);
+}
+.modal-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.modal-close {
+  width: 28px; height: 28px; border: none; background: none; cursor: pointer;
+  font-size: 20px; line-height: 1; color: var(--text-tertiary); border-radius: 6px;
+}
+.modal-close:hover { background: var(--bg-base); color: var(--text-primary); }
+.modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.modal-hint { margin: 0 0 4px; font-size: 12px; color: var(--text-tertiary); }
+.opt-row {
+  display: flex; gap: 10px; padding: 12px 14px;
+  border: 1px solid var(--border-base); border-radius: 10px;
+  cursor: pointer; transition: border-color .15s ease, background .15s ease;
+}
+.opt-row:hover { border-color: var(--primary); }
+.opt-row.on { border-color: var(--primary); background: var(--primary-container); }
+.opt-row input[type="radio"] {
+  margin-top: 2px; width: 15px; height: 15px; accent-color: var(--primary); flex-shrink: 0;
+}
+.opt-main { display: flex; flex-direction: column; gap: 3px; }
+.opt-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.opt-desc { font-size: 12px; color: var(--text-tertiary); line-height: 1.45; }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 20px; border-top: 1px solid var(--border-base);
+}
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity .18s ease; }
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 
 @media (max-width: 960px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
