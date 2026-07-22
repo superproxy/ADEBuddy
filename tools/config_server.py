@@ -2126,6 +2126,14 @@ def _replace_plaintext_with_refs(obj, value_map: dict):
 def _build_keys_yaml_for_export(referenced: set, include_values: bool) -> str | None:
     """构建导出用 keys.yaml 内容（仅含被引用的密钥）。
 
+    导出格式为扁平结构（无 mcp: 顶层段），每个 key 直接是 {value, description}：
+        KEY1:
+          value: xxx
+          description: ''
+        KEY2:
+          value: xxx
+          description: ''
+
     include_values=True  → vault 模式，含密钥明文值
     include_values=False → redacted 模式，值置空仅保留 key 名与描述
     """
@@ -2149,7 +2157,7 @@ def _build_keys_yaml_for_export(referenced: set, include_values: bool) -> str | 
     if not exported:
         return None
     import yaml as _yaml
-    return _yaml.dump({"mcp": exported}, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    return _yaml.dump(exported, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
 
 def _collect_plugin_llm(cfg: dict, key_mode: str = "plain") -> str | None:
@@ -2937,22 +2945,31 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                 skipped.append({"file": "hooks/hooks.json", "reason": str(e)})
 
         # 导入 keys.yaml → 合并到 config/keys.yaml（不覆盖已有值）
+        # 兼容两种格式：
+        #   - 新格式（扁平）：顶层直接是 {KEY: {value, description}}
+        #   - 旧格式（带 mcp: 段）：{mcp: {KEY: {value, description}}}
         if keys_content:
             try:
                 imported_keys = yaml.safe_load(keys_content.decode("utf-8"))
-                if isinstance(imported_keys, dict) and isinstance(imported_keys.get("mcp"), dict):
-                    full = _load_keys_full()
-                    if not isinstance(full.get("mcp"), dict):
-                        full["mcp"] = {}
-                    added = 0
-                    for k, entry in imported_keys["mcp"].items():
-                        if k in full["mcp"] and isinstance(full["mcp"][k], dict) and full["mcp"][k].get("value"):
-                            continue  # 保留用户已配置的值
-                        full["mcp"][k] = _normalize_key_entry(entry)
-                        added += 1
-                    if added:
-                        _save_keys_full(full)
-                    imported_extras.append(f"keys.yaml (+{added})")
+                if isinstance(imported_keys, dict):
+                    # 判断格式：若含 mcp 段且值为 dict → 旧格式；否则视为新扁平格式
+                    if isinstance(imported_keys.get("mcp"), dict):
+                        keys_to_import = imported_keys["mcp"]
+                    else:
+                        keys_to_import = imported_keys
+                    if isinstance(keys_to_import, dict) and keys_to_import:
+                        full = _load_keys_full()
+                        if not isinstance(full.get("mcp"), dict):
+                            full["mcp"] = {}
+                        added = 0
+                        for k, entry in keys_to_import.items():
+                            if k in full["mcp"] and isinstance(full["mcp"][k], dict) and full["mcp"][k].get("value"):
+                                continue  # 保留用户已配置的值
+                            full["mcp"][k] = _normalize_key_entry(entry)
+                            added += 1
+                        if added:
+                            _save_keys_full(full)
+                        imported_extras.append(f"keys.yaml (+{added})")
             except Exception as e:
                 skipped.append({"file": "keys.yaml", "reason": str(e)})
 
