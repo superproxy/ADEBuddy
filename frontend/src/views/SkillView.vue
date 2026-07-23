@@ -16,6 +16,7 @@ const {
   skillSearchMeta, manualSkillInput, manualPreview, manualSelected, manualPreviewing, manualInstalling,
   installedSkills, enabledInstalledCount, disabledInstalledCount,
   filteredInstalled, filteredLocalSkills, localSkills, localFilterQ, listFilter, listQuery,
+  updateChecking, updateList, updateCheckedAt, updatableCount, trackedCount,
 } = storeToRefs(skill)
 const {
   searchSkills, toggleSkillSource, installFromSearch,
@@ -23,7 +24,36 @@ const {
   onToggleSkill, toggleAllInstalled,
   toggleSkillList, deleteSkillList, exportSkills, importSkills,
   previewManualSource, clearManualPreview, toggleManualSkill, selectAllManualSkills, installSelectedManualSkills,
+  checkUpdates, upgradeSkill, upgradeAll,
 } = skill
+
+// ===== 升级检查 =====
+const updatePanelOpen = ref(false)
+/** name -> updateInfo 的映射，用于表格行升级按钮 */
+const updateMap = computed(() => {
+  const m: Record<string, any> = {}
+  for (const u of updateList.value) m[u.name] = u
+  return m
+})
+const updatableSet = computed(() => new Set(updateList.value.filter((u) => u.has_update).map((u) => u.name)))
+function openUpdatePanel() {
+  updatePanelOpen.value = true
+  // 打开时若未检查过或检查超过 5 分钟，自动触发一次
+  const stale = !updateCheckedAt.value || (Date.now() - new Date(updateCheckedAt.value).getTime() > 5 * 60 * 1000)
+  if (stale && !updateChecking.value) checkUpdates()
+}
+function closeUpdatePanel() { updatePanelOpen.value = false }
+async function refreshUpdates() { await checkUpdates() }
+async function doUpgrade(name: string) { await upgradeSkill(name) }
+async function doUpgradeAll() { await upgradeAll() }
+function shortSha(s: string) { return (s || '').slice(0, 7) }
+function formatCheckedAt(s: string) {
+  if (!s) return ''
+  try {
+    const d = new Date(s)
+    return d.toLocaleString()
+  } catch { return s }
+}
 
 // ===== 导出弹层 =====
 const exportOpen = ref(false)
@@ -460,7 +490,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <p class="text-xs text-ink-500 mt-1 mb-0">管理 Agent Skills · 浏览市场 / 本地预置 / 已安装三源 · 启停与同步到 IDE</p>
       </div>
       <div class="btn-cluster">
-        <button type="button" class="btn btn-secondary" @click="refreshInstalled">
+        <button type="button" class="btn btn-secondary" :class="{ 'btn-pulse': updatableCount > 0 }" @click="openUpdatePanel" :title="updatableCount ? `${updatableCount} 个可升级` : '检查升级'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
+          检查升级<span v-if="updatableCount" class="btn-badge">{{ updatableCount }}</span>
+        </button>
+        <button type="button" class="btn btn-ghost" @click="refreshInstalled">
           <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
           刷新
         </button>
@@ -474,8 +508,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <div class="kpis">
       <div class="kpi brand"><b>{{ installedSkills.length }}</b><span>已安装</span><em>.agents / config 并集</em></div>
       <div class="kpi live"><b>{{ enabledInstalledCount }}</b><span>启用中</span><em>写入 skill.yaml</em></div>
-      <div class="kpi"><b>{{ localSkills.length }}</b><span>本地预置</span><em>三源合并</em></div>
-      <div class="kpi warn"><b>{{ disabledInstalledCount }}</b><span>已禁用</span><em>不会同步</em></div>
+      <div class="kpi"><b>{{ trackedCount }}</b><span>已记录来源</span><em>可检查升级</em></div>
+      <div class="kpi warn" :class="{ 'pulse': updatableCount > 0 }"><b>{{ updatableCount }}</b><span>可升级</span><em>{{ updateCheckedAt ? '点击检查升级' : '未检查' }}</em></div>
     </div>
 
     <section class="panel">
@@ -545,6 +579,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   <svg class="sort-ic" :class="{ desc: installedSortBy === 'repo' && installedSortDir === 'desc' }" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
                 </span>
               </th>
+              <th style="width:130px">
+                <span class="th-label">来源/版本</span>
+              </th>
               <th class="sortable" :class="{ active: installedSortBy === 'path' }" @click="setInstalledSort('path')">
                 <span class="th-label">
                   路径
@@ -587,6 +624,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 <span v-else-if="s.repo" :title="s.repo">{{ s.repo }}</span>
                 <span v-else class="muted">—</span>
               </td>
+              <td>
+                <div v-if="s.installed_sha" class="src-info" :title="s.installed_sha">
+                  <span v-if="s.source_type === 'local'" class="tag tag-local">local</span>
+                  <span v-else class="tag tag-remote">remote</span>
+                  <code class="sha">{{ shortSha(s.installed_sha) }}</code>
+                </div>
+                <span v-else-if="s.source_type === 'local'" class="tag tag-local">local</span>
+                <span v-else class="muted">—</span>
+              </td>
               <td><div class="cmd" :title="s.path">{{ s.path || '—' }}</div></td>
               <td>
                 <div class="ops">
@@ -597,6 +643,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                     :aria-label="(s.enabled ? '禁用' : '启用') + ' ' + s.name"
                     @click="onToggleSkill(s, !s.enabled)"
                   />
+                  <button
+                    v-if="updatableSet.has(s.name)"
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    :title="`有新版本 · ${shortSha(updateMap[s.name]?.latest_sha || '')}`"
+                    @click="doUpgrade(s.name)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m6 9 6 6 6-6"/><path d="M21 21H3"/></svg>
+                    升级
+                  </button>
                   <button type="button" class="btn btn-soft btn-sm" @click="viewSkillMd(s.name)">
                     <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
                     查看
@@ -608,7 +664,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               </td>
             </tr>
             <tr v-if="!sortedInstalled.length">
-              <td colspan="6" class="empty-cell">
+              <td colspan="7" class="empty-cell">
                 {{ installedSkills.length ? '无匹配结果' : '暂无已安装技能，点击「添加技能」开始' }}
               </td>
             </tr>
@@ -763,6 +819,113 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 导入
               </button>
+            </footer>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 升级检查面板 -->
+    <Teleport to="body">
+      <Transition name="skill-export">
+        <div v-if="updatePanelOpen" class="update-root" @click.self="closeUpdatePanel">
+          <div class="export-panel update-panel" role="dialog" aria-modal="true" aria-labelledby="skill-update-title">
+            <header class="export-head">
+              <h3 id="skill-update-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
+                检查升级
+              </h3>
+              <button type="button" class="btn btn-icon btn-ghost" aria-label="关闭" @click="closeUpdatePanel">
+                <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </header>
+
+            <div class="export-body">
+              <div class="update-summary">
+                <div class="update-stat">
+                  <span class="stat-label">已记录来源</span>
+                  <b class="stat-val">{{ trackedCount }}</b>
+                </div>
+                <div class="update-stat" :class="{ hot: updatableCount > 0 }">
+                  <span class="stat-label">可升级</span>
+                  <b class="stat-val">{{ updatableCount }}</b>
+                </div>
+                <div class="update-stat">
+                  <span class="stat-label">最近检查</span>
+                  <b class="stat-val small">{{ updateCheckedAt ? formatCheckedAt(updateCheckedAt) : '未检查' }}</b>
+                </div>
+              </div>
+
+              <div class="update-actions">
+                <button type="button" class="btn btn-secondary btn-sm" :disabled="updateChecking" @click="refreshUpdates">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ spin: updateChecking }"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
+                  {{ updateChecking ? '检查中...' : '重新检查' }}
+                </button>
+                <button v-if="updatableCount > 0" type="button" class="btn btn-soft btn-sm" @click="doUpgradeAll">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m6 9 6 6 6-6"/><path d="M21 21H3"/></svg>
+                  全部升级 ({{ updatableCount }})
+                </button>
+              </div>
+
+              <div class="update-list">
+                <div v-if="!updateList.length && !updateChecking" class="update-empty">
+                  暂无已记录来源的技能<br />
+                  <span class="muted">安装远程技能时会自动记录来源</span>
+                </div>
+                <div v-else-if="updateChecking && !updateList.length" class="update-empty">
+                  正在检查升级...
+                </div>
+                <div v-else>
+                  <div
+                    v-for="u in updateList"
+                    :key="u.name"
+                    class="update-row"
+                    :class="{ hot: u.has_update }"
+                  >
+                    <div class="update-row-main">
+                      <div class="update-row-name">{{ u.name }}</div>
+                      <div class="update-row-source">
+                        <a v-if="u.owner && u.repo" :href="`https://github.com/${u.owner}/${u.repo}`" target="_blank" rel="noopener" class="repo-link">
+                          {{ u.owner }}/{{ u.repo }}
+                        </a>
+                        <span v-else class="muted">{{ u.source || '—' }}</span>
+                      </div>
+                    </div>
+                    <div class="update-row-sha">
+                      <div class="sha-line">
+                        <span class="sha-label">本地</span>
+                        <code>{{ u.installed_sha ? shortSha(u.installed_sha) : '—' }}</code>
+                      </div>
+                      <div class="sha-line">
+                        <span class="sha-label">远端</span>
+                        <code>{{ u.latest_sha ? shortSha(u.latest_sha) : '—' }}</code>
+                      </div>
+                    </div>
+                    <div class="update-row-status">
+                      <span v-if="u.has_update" class="tag tag-update">有更新</span>
+                      <span v-else-if="u.message" class="tag tag-error" :title="u.message">失败</span>
+                      <span v-else-if="!u.owner" class="tag tag-local">本地</span>
+                      <span v-else class="tag tag-ok">最新</span>
+                    </div>
+                    <div class="update-row-ops">
+                      <button
+                        v-if="u.has_update"
+                        type="button"
+                        class="btn btn-secondary btn-sm"
+                        @click="doUpgrade(u.name)"
+                      >升级</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p class="export-tip">
+                仅支持 GitHub 源的升级检查；本地预置技能不参与升级。安装时自动记录来源与版本 SHA，确保默认为最新版本。
+              </p>
+            </div>
+
+            <footer class="export-foot">
+              <button type="button" class="btn btn-ghost" @click="closeUpdatePanel">关闭</button>
             </footer>
           </div>
         </div>
@@ -1301,6 +1464,53 @@ table tbody tr.selected:hover { background: rgba(22, 93, 255, 0.12); }
   border-radius: 8px;
   line-height: 1;
 }
+.btn-pulse { animation: btn-pulse 1.8s ease-in-out infinite; }
+@keyframes btn-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 64 128 255), 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(var(--primary-rgb, 64 128 255), 0); }
+}
+
+/* 来源/版本标签 */
+.src-info { display: inline-flex; align-items: center; gap: 4px; }
+.src-info .sha { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--ink-600); }
+.tag { display: inline-flex; align-items: center; padding: 1px 6px; font-size: 10px; font-weight: 600; border-radius: 4px; line-height: 1.4; }
+.tag-local { background: rgba(140, 140, 140, 0.15); color: var(--ink-500); }
+.tag-remote { background: rgba(var(--primary-rgb, 64 128 255), 0.12); color: var(--primary); }
+.tag-ok { background: rgba(34, 197, 94, 0.15); color: rgb(22, 163, 74); }
+.tag-update { background: rgba(245, 158, 11, 0.18); color: rgb(217, 119, 6); }
+.tag-error { background: rgba(239, 68, 68, 0.15); color: rgb(220, 38, 38); }
+
+/* KPI 脉冲（可升级提示） */
+.kpi.pulse { animation: kpi-pulse 1.8s ease-in-out infinite; }
+@keyframes kpi-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+/* 升级面板 */
+.update-root { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.4); padding: 24px; }
+.update-panel { max-width: 720px; width: 100%; max-height: 80vh; }
+.update-summary { display: flex; gap: 16px; margin-bottom: 12px; }
+.update-stat { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--ink-50); border-radius: 8px; }
+.update-stat.hot { background: rgba(245, 158, 11, 0.1); }
+.stat-label { font-size: 11px; color: var(--ink-500); }
+.stat-val { font-size: 18px; font-weight: 700; color: var(--ink-900); }
+.stat-val.small { font-size: 12px; font-weight: 500; }
+.update-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+.update-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+.update-empty { text-align: center; padding: 32px 16px; color: var(--ink-500); font-size: 13px; }
+.update-row { display: grid; grid-template-columns: 1.5fr 1fr 80px 64px; gap: 8px; align-items: center; padding: 8px 10px; background: var(--ink-50); border-radius: 6px; border-left: 3px solid transparent; }
+.update-row.hot { border-left-color: rgb(245, 158, 11); background: rgba(245, 158, 11, 0.05); }
+.update-row-name { font-size: 13px; font-weight: 600; color: var(--ink-900); word-break: break-all; }
+.update-row-source { font-size: 11px; color: var(--ink-500); }
+.update-row-sha { display: flex; flex-direction: column; gap: 2px; }
+.sha-line { display: flex; gap: 4px; align-items: center; font-size: 11px; }
+.sha-label { color: var(--ink-500); min-width: 28px; }
+.sha-line code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-700); }
+.update-row-status { display: flex; justify-content: center; }
+.update-row-ops { display: flex; justify-content: flex-end; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* 过渡动画 */
 .fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.18s ease; }

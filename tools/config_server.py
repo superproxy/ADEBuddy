@@ -92,7 +92,12 @@ def _load_script_module(module_name: str, file_path: Path):
 # 从 lib/ 公共库导入（替代旧脚本的 importlib 加载）
 sys.path.insert(0, str(SCRIPTS_DIR))
 from lib.config_io import load_env_config_file, save_env_config_file
-from lib.skills import build_install_command, parse_shorthand, enable_skill, disable_skill, get_enabled_skills, list_remote_skills, ensure_npx_yes
+from lib.skills import (
+    build_install_command, parse_shorthand, enable_skill, disable_skill,
+    get_enabled_skills, list_remote_skills, ensure_npx_yes,
+    record_skill_source, remove_skill_source, get_skill_sources, check_skill_updates,
+    resolve_github_owner_repo,
+)
 from lib.plugins import install_plugin, update_env_file, add_to_installed
 from lib.ide.detect import detect_ide, detect_all
 from lib.ide.session import list_sessions, export_session, import_session_to_ide
@@ -1455,6 +1460,8 @@ def list_local_skills():
 @app.route("/api/skills/installed", methods=["GET"])
 def list_installed_skills():
     enabled_set = get_enabled_skills(SKILL_YAML)
+    # 预读 sources 记录（来源 + 安装 SHA）
+    sources_map = get_skill_sources(SKILL_YAML)
     # 预读 skills-index.csv，用于补充 github 作者/仓库信息
     csv_map: dict[str, dict] = {}
     if SKILLS_CSV.exists():
@@ -1516,6 +1523,24 @@ def list_installed_skills():
             # 从 CSV 补充 github 作者/仓库信息
             meta = csv_map.get(d.name, {})
             author, repo, github_url = _parse_github_source(meta)
+            # 优先用 sources_map 中的来源覆盖 CSV 的 author/repo
+            src_info = sources_map.get(d.name) if isinstance(sources_map, dict) else None
+            if src_info and isinstance(src_info, dict):
+                src_str = src_info.get("source") or ""
+                # local:xxx 视为本地预置
+                if src_str.startswith("local:"):
+                    source_type = "local"
+                else:
+                    source_type = "remote"
+                    # 若 sources 记录有 owner/repo 信息，优先用之
+                    s_owner, s_repo = resolve_github_owner_repo(src_str)
+                    if s_owner and s_repo:
+                        author = s_owner
+                        repo = s_repo
+                        if not github_url:
+                            github_url = f"https://github.com/{s_owner}/{s_repo}"
+            else:
+                source_type = meta.get("source_type") or ("local" if not author else "remote")
             installed.append({
                 "name": d.name,
                 "path": rel,
@@ -1524,7 +1549,11 @@ def list_installed_skills():
                 "author": author,
                 "repo": repo,
                 "github_url": github_url,
-                "source_type": meta.get("source_type") or "",
+                "source_type": source_type,
+                "source": src_info.get("source", "") if src_info else "",
+                "installed_at": src_info.get("installed_at", "") if src_info else "",
+                "installed_sha": src_info.get("installed_sha", "") if src_info else "",
+                "installed_ref": src_info.get("installed_ref", "") if src_info else "",
             })
     return jsonify({"ok": True, "data": installed})
 
@@ -1788,12 +1817,22 @@ def install_skill_sse():
             if target.exists():
                 yield f"data: [-] 技能已存在，跳过: {skill_name}\n\n"
                 yield f"data: [OK] {skill_name} (already installed)\n\n"
+                # 已安装也记录来源（local 预置不可升级）
+                try:
+                    record_skill_source(SKILL_YAML, skill_name, source="local:" + skill_name)
+                except Exception:
+                    pass
                 return
             try:
                 import shutil
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(cache, target, ignore=shutil.ignore_patterns('.git'))
                 yield f"data: [OK] Skill copied from template: {skill_name}\n\n"
+                # 记录来源：local 预置
+                try:
+                    record_skill_source(SKILL_YAML, skill_name, source="local:" + skill_name)
+                except Exception as e:
+                    yield f"data: [WARN] 记录来源失败: {e}\n\n"
             except Exception as e:
                 yield f"data: [ERROR] 复制失败: {e}\n\n"
         return Response(stream_with_context(_local_copy()), mimetype="text/event-stream")
@@ -1822,8 +1861,110 @@ def install_skill_sse():
             skill_name = effective_source
 
     cmd = ensure_npx_yes(cmd)
+    # 包一层：流结束后按实际安装结果记录来源
+    selected_names = [s.strip() for s in skill_name.split(",") if s.strip()]
+    # command 模式从 cmd 中解析源；非 command 模式用 effective_source
+    if command:
+        _m = re.search(r'\badd\s+([^\s]+)', command)
+        record_source = _m.group(1) if _m else source
+    else:
+        record_source = effective_source if 'effective_source' in dir() else source
+    def _stream_with_record():
+        ok_count = 0
+        for chunk in _stream_process(cmd, cwd=PROJECT_ROOT):
+            if "[OK]" in chunk:
+                ok_count += 1
+            yield chunk
+        # 流结束后记录来源：仅记录实际成功落到磁盘的 skill
+        if ok_count > 0:
+            installed_names = []
+            for nm in selected_names:
+                if (DOT_AGENTS_SKILLS / nm).exists() or (PROJECT_SKILLS_DIR / nm).exists():
+                    installed_names.append(nm)
+            if not installed_names:
+                # 整个仓库安装，无法按名验证 → 用仓库名占位
+                installed_names = [selected_names[0]] if selected_names else []
+            for nm in installed_names:
+                try:
+                    record_skill_source(
+                        SKILL_YAML, nm,
+                        source=record_source,
+                        skill_filter=nm if nm in selected_names and len(selected_names) > 1 else "",
+                    )
+                except Exception as e:
+                    yield f"data: [WARN] 记录来源失败 {nm}: {e}\n\n"
     return Response(
-        stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
+        stream_with_context(_stream_with_record()),
+        mimetype="text/event-stream",
+    )
+
+
+@app.route("/api/skills/check-updates", methods=["GET"])
+def skills_check_updates():
+    """检查所有已记录来源的 skill 是否有新版本。
+
+    Query:
+      names=skill1,skill2  可选，仅检查指定名称；缺省全部
+    """
+    names_csv = request.args.get("names", "").strip()
+    only_names = [n.strip() for n in names_csv.split(",") if n.strip()] if names_csv else None
+    try:
+        result = check_skill_updates(SKILL_YAML, only_names=only_names)
+        return jsonify({"ok": True, "data": result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/skills/upgrade", methods=["GET"])
+def skills_upgrade_sse():
+    """SSE: 升级指定 skill（重新拉取并覆盖安装）。
+    Query:
+      name=skill_name  必填
+    """
+    name = request.args.get("name", "").strip()
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        return Response("data: [ERROR] 非法技能名\n\n", mimetype="text/event-stream")
+
+    sources = get_skill_sources(SKILL_YAML)
+    info = sources.get(name) if isinstance(sources, dict) else None
+    if not info or not isinstance(info, dict):
+        return Response(f"data: [ERROR] 未找到 {name} 的来源记录，无法升级\n\n", mimetype="text/event-stream")
+
+    src = (info.get("source") or "").strip()
+    if not src or src.startswith("local:"):
+        return Response(f"data: [ERROR] {name} 为本地预置技能，不可升级\n\n", mimetype="text/event-stream")
+
+    skill_filter = info.get("skill") or ""
+    # 重新安装：复用 install 路由的逻辑，但走 source 模式
+    if skill_filter:
+        cmd = f"npx --yes skills add {src} --skill {skill_filter} --copy -y"
+    else:
+        cmd = f"npx --yes skills add {src} --copy -y"
+    cmd = ensure_npx_yes(cmd)
+
+    def _stream_upgrade():
+        ok_count = 0
+        for chunk in _stream_process(cmd, cwd=PROJECT_ROOT):
+            if "[OK]" in chunk:
+                ok_count += 1
+            yield chunk
+        if ok_count > 0:
+            # 升级成功后刷新记录的 installed_sha（默认最新）
+            try:
+                record_skill_source(
+                    SKILL_YAML, name,
+                    source=src,
+                    skill_filter=skill_filter,
+                    url=info.get("url", ""),
+                )
+                yield f"data: [OK] 已更新来源记录: {name}\n\n"
+            except Exception as e:
+                yield f"data: [WARN] 更新来源记录失败: {e}\n\n"
+        else:
+            yield f"data: [WARN] 升级未成功，未更新来源记录\n\n"
+
+    return Response(
+        stream_with_context(_stream_upgrade()),
         mimetype="text/event-stream",
     )
 
@@ -1857,6 +1998,11 @@ def uninstall_skill(name):
         # 从启用清单移除（若存在）
         try:
             disable_skill(SKILL_YAML, name)
+        except Exception:
+            pass
+        # 从来源记录中移除（若存在）
+        try:
+            remove_skill_source(SKILL_YAML, name)
         except Exception:
             pass
         return jsonify({"ok": True, "removed": removed})
@@ -2689,7 +2835,13 @@ def export_plugin():
 
         buf.seek(0)
         safe_name = "".join(c for c in plugin_name if c.isalnum() or c in ("-", "_"))
-        download = f"{safe_name or 'plugin'}.zip"
+        # 默认后缀 -plugin.zip，方便用户识别插件类型
+        base = safe_name or 'plugin'
+        # 已含 -plugin 后缀则不重复添加
+        if base.lower().endswith('-plugin'):
+            download = f"{base}.zip"
+        else:
+            download = f"{base}-plugin.zip"
         return send_file(buf, as_attachment=True, download_name=download,
                          mimetype="application/zip")
     except Exception as e:

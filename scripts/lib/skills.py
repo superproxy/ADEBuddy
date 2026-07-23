@@ -810,3 +810,185 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
     # Step 5: 都不行 → 失败
     print(f"{COLOR_RED}[✗] Skill install failed (not via source/marketplace/local): {skill_name}{COLOR_RESET}")
     return False
+
+
+# ============================================================
+# Skill 来源记录与升级检查
+# ============================================================
+# skill.yaml 扩展结构（与 enabled 平行，向后兼容）：
+#   enabled: [name, ...]
+#   sources:
+#     <skill_name>:
+#       source: owner/repo            # 安装源（owner/repo 形式）
+#       skill: <skill>                # 可选，--skill 参数
+#       url: <url>                    # 可选，原始 url（github 优先）
+#       installed_at: 2026-07-23T...Z # 安装时间（UTC ISO）
+#       installed_ref: main           # 安装时查询的分支/tag
+#       installed_sha: abc123         # 安装时的 commit SHA
+#       latest_sha: abc123            # 最近一次检查到的最新 SHA（缓存）
+#       latest_checked_at: 2026-07-23T...Z
+
+def _now_utc_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _github_headers() -> dict:
+    import os
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AgentBuddy/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _fetch_github_head_sha(owner: str, repo: str, timeout: int = 10) -> dict:
+    """查询 GitHub 仓库 HEAD commit。
+
+    Returns: {sha, ref, message} — 失败时 message 非空。
+    """
+    import requests
+    headers = _github_headers()
+    # 先取 default branch
+    try:
+        r = requests.get(
+            f"https://api.github.com/repos/{owner}/{repo}",
+            headers=headers, timeout=timeout,
+        )
+        if r.status_code == 404:
+            return {"sha": "", "ref": "", "message": "仓库不存在或无访问权限"}
+        r.raise_for_status()
+        default_branch = r.json().get("default_branch") or "main"
+    except Exception as e:
+        return {"sha": "", "ref": "", "message": f"获取仓库信息失败: {e}"}
+    # 再取该分支最新 commit
+    try:
+        r = requests.get(
+            f"https://api.github.com/repos/{owner}/{repo}/commits/{default_branch}",
+            headers=headers, timeout=timeout,
+        )
+        r.raise_for_status()
+        data = r.json()
+        sha = data.get("sha") or ""
+        msg = (data.get("commit", {}).get("message") or "").split("\n", 1)[0]
+        return {"sha": sha, "ref": default_branch, "message": msg}
+    except Exception as e:
+        return {"sha": "", "ref": default_branch, "message": f"获取 commit 失败: {e}"}
+
+
+def record_skill_source(
+    skill_yaml_path: Path,
+    skill_name: str,
+    source: str,
+    skill_filter: str = "",
+    url: str = "",
+    installed_sha: str = "",
+    installed_ref: str = "",
+) -> None:
+    """记录一个 skill 的安装来源到 skill.yaml。
+
+    若 installed_sha 为空，会尝试查询 GitHub HEAD SHA（保证"默认最新"语义）。
+    """
+    if not skill_name:
+        return
+    data = load_skill_yaml(skill_yaml_path)
+    sources = data.get("sources")
+    if not isinstance(sources, dict):
+        sources = {}
+    # 自动补 SHA（仅 GitHub 源）
+    owner, repo = resolve_github_owner_repo(source) if source else ("", "")
+    if not installed_sha and owner and repo:
+        info = _fetch_github_head_sha(owner, repo)
+        if info.get("sha"):
+            installed_sha = info["sha"]
+            if not installed_ref:
+                installed_ref = info.get("ref", "")
+    entry = {
+        "source": source,
+        "installed_at": _now_utc_iso(),
+        "installed_sha": installed_sha,
+        "installed_ref": installed_ref,
+    }
+    if skill_filter:
+        entry["skill"] = skill_filter
+    if url:
+        entry["url"] = url
+    sources[skill_name] = entry
+    data["sources"] = sources
+    save_skill_yaml(skill_yaml_path, data)
+
+
+def remove_skill_source(skill_yaml_path: Path, skill_name: str) -> bool:
+    """从 skill.yaml 的 sources 中移除一个 skill 的来源记录。"""
+    data = load_skill_yaml(skill_yaml_path)
+    sources = data.get("sources")
+    if not isinstance(sources, dict) or skill_name not in sources:
+        return False
+    sources.pop(skill_name, None)
+    data["sources"] = sources
+    save_skill_yaml(skill_yaml_path, data)
+    return True
+
+
+def get_skill_sources(skill_yaml_path: Path) -> dict:
+    """读取 skill.yaml 的 sources 字典。"""
+    data = load_skill_yaml(skill_yaml_path)
+    sources = data.get("sources")
+    return sources if isinstance(sources, dict) else {}
+
+
+def check_skill_updates(skill_yaml_path: Path, only_names: list = None) -> list:
+    """检查所有已记录来源的 skill 是否有更新。
+
+    Args:
+        only_names: 仅检查指定名称；None 表示全部。
+
+    Returns: [{name, source, owner, repo, installed_sha, latest_sha,
+              has_update, latest_checked_at, message}]
+    """
+    sources = get_skill_sources(skill_yaml_path)
+    out = []
+    only_set = set(only_names) if only_names else None
+    for name, info in sources.items():
+        if only_set is not None and name not in only_set:
+            continue
+        if not isinstance(info, dict):
+            continue
+        source = info.get("source") or ""
+        owner, repo = resolve_github_owner_repo(source) if source else ("", "")
+        installed_sha = (info.get("installed_sha") or "").strip()
+        if not owner or not repo:
+            out.append({
+                "name": name,
+                "source": source,
+                "owner": "",
+                "repo": "",
+                "installed_sha": installed_sha,
+                "latest_sha": "",
+                "has_update": False,
+                "latest_checked_at": _now_utc_iso(),
+                "message": "非 GitHub 源，无法检查升级",
+            })
+            continue
+        head = _fetch_github_head_sha(owner, repo)
+        latest_sha = head.get("sha", "").strip()
+        has_update = bool(latest_sha) and bool(installed_sha) and latest_sha != installed_sha
+        out.append({
+            "name": name,
+            "source": source,
+            "owner": owner,
+            "repo": repo,
+            "installed_sha": installed_sha,
+            "latest_sha": latest_sha,
+            "has_update": has_update,
+            "latest_ref": head.get("ref", ""),
+            "latest_message": head.get("message", ""),
+            "latest_checked_at": _now_utc_iso(),
+            "message": head.get("message") if not latest_sha else "",
+        })
+    return out
+

@@ -19,6 +19,28 @@ export interface InstalledSkill {
   github_url?: string
   /** 来源类型：remote / local */
   source_type?: string
+  /** 安装来源字符串（owner/repo 或 local:xxx） */
+  source?: string
+  /** 安装时间 UTC ISO */
+  installed_at?: string
+  /** 安装时的 commit SHA */
+  installed_sha?: string
+  /** 安装时的分支/tag */
+  installed_ref?: string
+}
+
+export interface SkillUpdateInfo {
+  name: string
+  source: string
+  owner: string
+  repo: string
+  installed_sha: string
+  latest_sha: string
+  has_update: boolean
+  latest_ref?: string
+  latest_message?: string
+  latest_checked_at: string
+  message?: string
 }
 
 export type SkillSourceId = 'skillssh' | 'smithery' | 'modelscope' | 'skillsmp' | 'clawhub' | 'anthropics' | 'github'
@@ -65,6 +87,11 @@ export const useSkillStore = defineStore('skill', () => {
   const listQuery = ref('')
   const localFilterQ = ref('')
   const _togglingSkills = reactive(new Set<string>())
+
+  // ===== 升级检查 =====
+  const updateChecking = ref(false)
+  const updateList = ref<SkillUpdateInfo[]>([])
+  const updateCheckedAt = ref('')
 
   /** @deprecated 兼容旧模板；请用 skillMarketSources */
   const skillSources = reactive({ modelscope: true, skillssh: true })
@@ -255,6 +282,57 @@ export const useSkillStore = defineStore('skill', () => {
   async function loadInstalledSkills() {
     const r = await api<{ ok: boolean; data?: InstalledSkill[] }>('/api/skills/installed')
     if (r.ok) installedSkills.value = r.data || []
+  }
+
+  /** 可升级的 skill 数量（有 GitHub 来源记录且检查出有更新） */
+  const updatableCount = computed(() => updateList.value.filter((u) => u.has_update).length)
+  /** 已记录来源的 skill 数量 */
+  const trackedCount = computed(() => updateList.value.length)
+
+  /** 检查所有已记录来源的 skill 是否有新版本 */
+  async function checkUpdates(names?: string[]) {
+    updateChecking.value = true
+    try {
+      const qs = names && names.length
+        ? '?names=' + encodeURIComponent(names.join(','))
+        : ''
+      const r = await api<{ ok: boolean; data?: SkillUpdateInfo[]; error?: string }>('/api/skills/check-updates' + qs)
+      if (r.ok) {
+        updateList.value = r.data || []
+        updateCheckedAt.value = new Date().toISOString()
+      } else {
+        ui.toast('检查升级失败: ' + (r.error || '未知错误'), 'err')
+      }
+    } finally {
+      updateChecking.value = false
+    }
+  }
+
+  /** 升级单个 skill（SSE 流式） */
+  async function upgradeSkill(name: string) {
+    ui.clearLog()
+    await runSse(
+      '/api/skills/upgrade?name=' + encodeURIComponent(name),
+      (line) => ui.appendLog(line),
+      { onDone: () => loadInstalledSkills() },
+    )
+  }
+
+  /** 批量升级所有有更新的 skill */
+  async function upgradeAll() {
+    const targets = updateList.value.filter((u) => u.has_update).map((u) => u.name)
+    if (!targets.length) { ui.toast('没有可升级的技能', 'warn'); return }
+    ui.clearLog()
+    for (const name of targets) {
+      ui.appendLog(`--- 升级 ${name} ---`)
+      await runSse(
+        '/api/skills/upgrade?name=' + encodeURIComponent(name),
+        (line) => ui.appendLog(line),
+      )
+    }
+    await loadInstalledSkills()
+    await checkUpdates()
+    ui.toast(`已升级 ${targets.length} 个技能`)
   }
   async function viewSkillMd(name: string) {
     const r = await api<{ ok: boolean; content?: string; error?: string }>('/api/skills/' + encodeURIComponent(name) + '/skillmd')
@@ -473,6 +551,9 @@ export const useSkillStore = defineStore('skill', () => {
     listFilter, listQuery, localFilterQ,
     skillCategories, skillRoles, filteredLocalSkills, enabledInstalledCount, disabledInstalledCount,
     filteredInstalled,
+    // 升级检查
+    updateChecking, updateList, updateCheckedAt, updatableCount, trackedCount,
+    checkUpdates, upgradeSkill, upgradeAll,
     loadLocalSkills, searchSkills, toggleSkillSource, installFromSearch, installManualSkill,
     previewManualSource, clearManualPreview, toggleManualSkill, selectAllManualSkills, installSelectedManualSkills,
     loadInstalledSkills,

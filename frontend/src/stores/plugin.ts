@@ -76,8 +76,10 @@ export const usePluginStore = defineStore('plugin', () => {
       file, format, key_mode: keyMode,
     })
     if (extras && extras.length) params.set('extras', extras.join(','))
+    // 后端会自动追加 -plugin.zip 后缀，前端只传基础名（不带后缀）
+    const baseName = file.replace(/\.plugin\.yaml$/, '').replace(/-plugin$/, '')
     doDownload('/api/plugin/export?' + params.toString(),
-               format === 'zip' ? `${file.replace('.plugin.yaml', '')}.zip` : file)
+               format === 'zip' ? `${baseName}-plugin.zip` : file)
   }
   function toggleSelectForExport(file: string) {
     const s = new Set(selectedForExport.value)
