@@ -413,7 +413,7 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
             flat[k] = v
 
     # 批量解析 ${VAR} 占位符：llm.yaml / mcp.yaml.mcp / keys.yaml 中的 ${VAR} 引用
-    # 优先级：OS env > flat 自身（已含 mcp/misc 段）> ${VAR:-default} 默认值 > 保留字面
+    # 优先级：flat 自身（已含 mcp/misc 段，即 keys.yaml）> ${VAR:-default} 默认值 > 保留字面
     # 多次迭代直到稳定（最多 5 次，防止循环引用）
     from lib import placeholder
     env_map_for_resolve = {k: v for k, v in flat.items() if isinstance(v, str)}
@@ -434,16 +434,14 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
 
 
 def get_env_entries(flat_config: dict) -> list[tuple[str, str]]:
+    """从 flat_config（keys.yaml）提取环境变量条目。
+
+    不从 OS 环境变量补充 —— 环境变量是 keys.yaml 生效的渠道，
+    而不是反向数据源。keys.yaml 未配置的变量视为未设置。
+    """
     entries = []
     for key, value in flat_config.items():
         value_str = str(value).strip() if value is not None else ""
-        if not value_str:
-            os_value = os.environ.get(key, "").strip()
-            if os_value:
-                value_str = os_value
-                print(
-                    f"  {COLOR_DARKGRAY}[FALLBACK] {key} 取自 OS 环境变量{COLOR_RESET}"
-                )
         if value_str:
             entries.append((key, value_str))
     return entries

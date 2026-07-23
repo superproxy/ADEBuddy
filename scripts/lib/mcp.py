@@ -46,7 +46,7 @@ def invoke_generate_step(
     template_content = template_file.read_text(encoding="utf-8")
 
     env_map = {k: str(v) if v is not None else "" for k, v in flat_config.items()}
-    # 扫描占位符并按来源打印日志（OS env 优先 > env_map > default）
+    # 扫描占位符并按来源打印日志（env_map/keys.yaml > default）
     seen_placeholders = set()
     for m in re.finditer(r"\$\{(\w+)(?::-([^}]*))?\}", template_content):
         var_name = m.group(1)
@@ -55,11 +55,8 @@ def invoke_generate_step(
         seen_placeholders.add(var_name)
         default_value = m.group(2)
         full_match = m.group(0)
-        os_val = os.environ.get(var_name)
-        if os_val is not None:
-            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (os){os_val}{COLOR_RESET}")
-        elif env_map.get(var_name) is not None:
-            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (env){env_map[var_name]}{COLOR_RESET}")
+        if env_map.get(var_name) is not None:
+            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (keys){env_map[var_name]}{COLOR_RESET}")
         elif default_value is not None:
             print(f"  {COLOR_CYAN}[DEFAULT] {full_match} -> {default_value}{COLOR_RESET}")
 
@@ -186,7 +183,7 @@ def invoke_mcp_generate_step(
     template_content = json.dumps({"mcpServers": enabled_servers}, indent=2, ensure_ascii=False) + "\n"
 
     env_map = {k: str(v) if v is not None else "" for k, v in flat_config.items()}
-    # 扫描占位符并按来源打印日志（OS env 优先 > env_map > default）
+    # 扫描占位符并按来源打印日志（env_map/keys.yaml > default）
     seen_placeholders = set()
     for m in re.finditer(r"\$\{(\w+)(?::-([^}]*))?\}", template_content):
         var_name = m.group(1)
@@ -195,11 +192,8 @@ def invoke_mcp_generate_step(
         seen_placeholders.add(var_name)
         default_value = m.group(2)
         full_match = m.group(0)
-        os_val = os.environ.get(var_name)
-        if os_val is not None:
-            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (os){os_val}{COLOR_RESET}")
-        elif env_map.get(var_name) is not None:
-            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (env){env_map[var_name]}{COLOR_RESET}")
+        if env_map.get(var_name) is not None:
+            print(f"  {COLOR_GREEN}[REPLACED] {full_match} -> (keys){env_map[var_name]}{COLOR_RESET}")
         elif default_value is not None:
             print(f"  {COLOR_CYAN}[DEFAULT] {full_match} -> {default_value}{COLOR_RESET}")
 

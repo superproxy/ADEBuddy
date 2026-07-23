@@ -62,10 +62,12 @@ def resolve_str(text: str, env_map: dict) -> tuple:
     """解析字符串中的 ${VAR} 与 ${VAR:-default} 占位符。
 
     解析优先级：
-      1. OS 环境变量（os.environ）
-      2. env_map（keys.yaml / mcp.yaml.mcp / flat_config）
-      3. ${VAR:-default} 的 default 字面值
-      4. 都没有 → 保留字面 ${VAR}（交由 prune 阶段处理）
+      1. env_map（keys.yaml / mcp.yaml.mcp / flat_config）
+      2. ${VAR:-default} 的 default 字面值
+      3. 都没有 → 保留字面 ${VAR}（交由 prune 阶段处理）
+
+    注意：不直接读取 OS 环境变量。环境变量由 keys.yaml 写入（见 llm.apply_keys_to_env），
+    占位符解析时只认 keys.yaml 的值，确保配置可追溯。
 
     返回 (resolved_text, replaced_count)。
     """
@@ -77,10 +79,7 @@ def resolve_str(text: str, env_map: dict) -> tuple:
         var_name = m.group(1)
         default_value = m.group(2)
         full_match = m.group(0)
-        os_val = os.environ.get(var_name)
-        if os_val is not None:
-            resolved = os_val
-        elif env_map.get(var_name) is not None:
+        if env_map.get(var_name) is not None:
             resolved = env_map[var_name]
         else:
             resolved = default_value
@@ -90,11 +89,7 @@ def resolve_str(text: str, env_map: dict) -> tuple:
     for m in re.finditer(r"\$\{(\w+)\}", text):
         var_name = m.group(1)
         full_match = m.group(0)
-        os_val = os.environ.get(var_name)
-        if os_val is not None:
-            text = text.replace(full_match, os_val)
-            replaced += 1
-        elif env_map.get(var_name) is not None:
+        if env_map.get(var_name) is not None:
             text = text.replace(full_match, env_map[var_name])
             replaced += 1
         # 都没有时不替换，保留 ${VAR}（交由 prune 阶段处理）
@@ -102,7 +97,7 @@ def resolve_str(text: str, env_map: dict) -> tuple:
 
 
 def resolve_dict(obj, env_map: dict) -> tuple:
-    """递归解析 dict/list/str 中的 ${VAR} 占位符（OS env 优先于 env_map）。
+    """递归解析 dict/list/str 中的 ${VAR} 占位符（只认 env_map / keys.yaml）。
 
     返回 (resolved_obj, replaced_count)。
     """
