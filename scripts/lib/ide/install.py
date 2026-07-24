@@ -634,47 +634,82 @@ def _fix_windows_cli_install(ide_key: str) -> str:
         return ""
     localappdata = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
 
-    # Cursor: 官方脚本应把 versions/<ver>/cursor-agent.* 复制到 cursor-agent/
-    # 并创建 agent.* 别名。若根目录缺少 agent.cmd 则补完。
+    # Cursor: 官方安装脚本可能未完整执行，导致：
+    # 1. versions 下只有 dist-package（非版本号格式），cursor-agent.ps1 找不到版本目录
+    #    （cursor-agent.ps1 用正则 ^\d{4}\.\d{1,2}\.\d{1,2}... 匹配，dist-package 不匹配）
+    # 2. 根目录虽有 cursor-agent.ps1，但调用时报 "No version directories found"
+    #
+    # 修复策略：生成一个独立的 agent.cmd/agent.ps1，直接调用 dist-package（或最新版本目录）
+    # 里的 node.exe + index.js，绕过 cursor-agent.ps1 的版本目录查找逻辑。
     if ide_key == "Cursor":
         agent_dir = Path(localappdata) / "cursor-agent"
         if not agent_dir.is_dir():
             return ""
-        agent_cmd = agent_dir / "agent.cmd"
-        if agent_cmd.exists():
-            return ""  # 已有 agent.cmd，无需修复
-        versions_dir = agent_dir / "versions"
-        if not versions_dir.is_dir():
-            return ""
-        # 找到包含 cursor-agent.* 的版本目录（可能是 dist-package 或版本号）
-        src_dir = None
-        for d in sorted(versions_dir.iterdir(), reverse=True):
-            if d.is_dir() and any(d.glob("cursor-agent*")):
-                src_dir = d
-                break
-        if not src_dir:
-            return ""
-        fixed: list[str] = []
         import shutil as _shutil
-        # 复制 cursor-agent.* 到根目录，并创建 agent.* 别名
-        for f in src_dir.glob("cursor-agent*"):
-            dst = agent_dir / f.name
-            try:
-                _shutil.copy2(f, dst)
-            except Exception:
-                pass
-        # 创建 agent.* 别名（复制 cursor-agent.* → agent.*）
-        for ext in [".cmd", ".ps1", ".exe", ".js"]:
-            ca = agent_dir / f"cursor-agent{ext}"
-            ag = agent_dir / f"agent{ext}"
-            if ca.exists() and not ag.exists():
-                try:
-                    _shutil.copy2(ca, ag)
-                    fixed.append(f"agent{ext}")
-                except Exception:
-                    pass
+        import re as _re
+        fixed: list[str] = []
+        versions_dir = agent_dir / "versions"
+
+        # 找到包含 node.exe 的源目录（优先版本号目录，其次 dist-package）
+        src_dir = None
+        if versions_dir.is_dir():
+            ver_pattern = _re.compile(r"^\d{4}\.\d{1,2}\.\d{1,2}(-\d{2}-\d{2}-\d{2})?-[a-f0-9]+$")
+            # 先找合法版本目录
+            legal = [d for d in versions_dir.iterdir()
+                     if d.is_dir() and ver_pattern.match(d.name) and (d / "node.exe").exists()]
+            if legal:
+                src_dir = sorted(legal, reverse=True)[0]
+            else:
+                # 回退到 dist-package
+                dist_pkg = versions_dir / "dist-package"
+                if dist_pkg.is_dir() and (dist_pkg / "node.exe").exists():
+                    src_dir = dist_pkg
+
+        if not src_dir:
+            return ""  # 无可用源目录，无法修复
+
+        # 生成独立的 agent.cmd（直接调用 node.exe index.js，不走 cursor-agent.ps1）
+        agent_cmd = agent_dir / "agent.cmd"
+        node_exe = src_dir / "node.exe"
+        index_js = src_dir / "index.js"
+        if not index_js.exists():
+            # 尝试找其他 *.js 入口
+            js_files = list(src_dir.glob("*.js"))
+            if js_files:
+                index_js = js_files[0]
+            else:
+                return ""  # 无 JS 入口文件
+
+        # agent.cmd：直接调用 node.exe + index.js，传递所有参数
+        agent_cmd_content = f"""@echo off
+setlocal
+set "SCRIPT_DIR=%~dp0"
+set "CURSOR_INVOKED_AS=agent.cmd"
+if not defined NODE_COMPILE_CACHE set "NODE_COMPILE_CACHE=%LOCALAPPDATA%\\cursor-compile-cache"
+"%SCRIPT_DIR%versions\\{src_dir.name}\\node.exe" "%SCRIPT_DIR%versions\\{src_dir.name}\\{index_js.name}" %*
+exit /b %ERRORLEVEL%
+"""
+        agent_ps1_content = f"""$env:CURSOR_INVOKED_AS = 'agent.ps1'
+if (-not $env:NODE_COMPILE_CACHE) {{
+    $env:NODE_COMPILE_CACHE = "$env:LOCALAPPDATA\\cursor-compile-cache"
+}}
+$scriptPath = Split-Path -parent $MyInvocation.MyCommand.Definition
+& "$scriptPath\\versions\\{src_dir.name}\\node.exe" "$scriptPath\\versions\\{src_dir.name}\\{index_js.name}" $args
+exit $LASTEXITCODE
+"""
+        try:
+            agent_cmd.write_text(agent_cmd_content, encoding="utf-8")
+            fixed.append("agent.cmd")
+        except Exception:
+            pass
+        try:
+            (agent_dir / "agent.ps1").write_text(agent_ps1_content, encoding="utf-8")
+            fixed.append("agent.ps1")
+        except Exception:
+            pass
+
         if fixed:
-            return f"已补完 Cursor CLI 别名: {', '.join(fixed)}"
+            return f"已修复 Cursor CLI（生成独立启动器，源: {src_dir.name}）: {', '.join(fixed)}"
         return ""
 
     return ""
