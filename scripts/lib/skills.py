@@ -1051,6 +1051,13 @@ def record_skill_source(
         _append_reference(entry, ref_type, ref_name)
     sources[skill_name] = entry
     data["sources"] = sources
+    # 安装/记录来源时自动加入 enabled 清单，确保 sync 不会因 enabled 过滤跳过
+    enabled = data.get("enabled", [])
+    if not isinstance(enabled, list):
+        enabled = []
+    if skill_name not in enabled:
+        enabled.append(skill_name)
+        data["enabled"] = enabled
     save_skill_yaml(skill_yaml_path, data)
 
 
@@ -1062,6 +1069,11 @@ def remove_skill_source(skill_yaml_path: Path, skill_name: str) -> bool:
         return False
     sources.pop(skill_name, None)
     data["sources"] = sources
+    # 同步从 enabled 清单移除，保持 sources 与 enabled 一致
+    enabled = data.get("enabled", [])
+    if isinstance(enabled, list) and skill_name in enabled:
+        enabled.remove(skill_name)
+        data["enabled"] = enabled
     save_skill_yaml(skill_yaml_path, data)
     return True
 

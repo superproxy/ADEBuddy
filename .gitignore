@@ -16,6 +16,7 @@ temp_parse.py
 # === 临时/缓存 ===
 .DS_Store
 .agents
+.agent
 .idea
 .claude
 .qoder

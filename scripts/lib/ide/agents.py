@@ -1,12 +1,13 @@
-﻿""".agent 公共 IDE 规范目录分发器。
+""".agent 公共 IDE 规范目录分发器。
 
 定位：把全部配置（rules/mcp/skills/subagents/AGENTS.md）同步到 .agent/ 目录，
 作为公共 IDE 规范源，默认不在 UI 显示（hidden=True）。
 各 IDE 可共享读取此目录，用软链接避免重复占用磁盘。
 """
+import shutil
 from pathlib import Path
 
-from lib.logging import COLOR_GREEN, COLOR_RESET
+from lib.logging import COLOR_GREEN, COLOR_RED, COLOR_RESET
 from lib.mcp import copy_file_safe, copy_dir_safe
 from lib.skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
@@ -22,12 +23,49 @@ class AgentsTarget(IdeTarget):
         """公共 .agent/ 目录。"""
         return self.root / ".agent"
 
-    def init_rules(self, source_rules: Path):
-        """同步 rules 到 .agent/rules/。"""
-        if not source_rules or not Path(source_rules).exists():
+    def init_rules(self, source_rules):
+        """同步 rules 到 .agent/rules/（支持多源合并，前者优先）。
+
+        source_rules 可为 Path 或 list[Path]（如 [config/rules, template/rules]），
+        多源时按顺序合并，同名条目前者优先，后者跳过。
+        """
+        srcs = source_rules if isinstance(source_rules, list) else [source_rules]
+        srcs = [Path(s) for s in srcs if s and Path(s).exists()]
+        if not srcs:
             return
         dst = self.agent_dir / "rules"
-        copy_dir_safe(source_rules, dst, ".agent/rules/", self.force)
+        dst.mkdir(parents=True, exist_ok=True)
+        seen = set()
+        copied = 0
+        for src_dir in srcs:
+            for item in sorted(src_dir.iterdir()):
+                if item.name in seen:
+                    continue
+                target = dst / item.name
+                if target.exists() or target.is_symlink():
+                    if not self.force:
+                        seen.add(item.name)
+                        continue
+                    try:
+                        if target.is_dir() and not target.is_symlink():
+                            shutil.rmtree(str(target), ignore_errors=True)
+                        else:
+                            target.unlink(missing_ok=True)
+                    except Exception:
+                        seen.add(item.name)
+                        continue
+                try:
+                    if item.is_dir():
+                        shutil.copytree(str(item), str(target),
+                                        ignore=shutil.ignore_patterns('.git'))
+                    else:
+                        shutil.copy2(str(item), str(target))
+                    seen.add(item.name)
+                    copied += 1
+                except Exception as e:
+                    print(f"{COLOR_RED}[!] Failed to copy rule {item.name}: {e}{COLOR_RESET}")
+        if copied:
+            print(f"{COLOR_GREEN}[OK] .agent/rules/: {copied} files copied{COLOR_RESET}")
 
     def init_mcp(self, source_mcp_file: Path):
         """同步 mcp 配置到 .agent/mcp/。"""
