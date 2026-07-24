@@ -1,8 +1,11 @@
-""".agent 公共 IDE 规范目录分发器。
+""".agents 公共 IDE 规范目录分发器。
 
-定位：把全部配置（rules/mcp/skills/subagents/AGENTS.md）同步到 .agent/ 目录，
+定位：把全部配置（rules/mcp/skills/subagents/AGENTS.md）同步到 .agents/ 目录，
 作为公共 IDE 规范源，默认不在 UI 显示（hidden=True）。
 各 IDE 可共享读取此目录，用软链接避免重复占用磁盘。
+
+.agents/ 同时也是 skill 安装落地处（.agents/skills/），sync 时 skills 子目录
+源与目标相同，init_skills 会跳过自我复制（由 copy_skills_safe 内 seen 机制保证）。
 """
 import shutil
 from pathlib import Path
@@ -15,13 +18,13 @@ from .base import IdeTarget
 
 class AgentsTarget(IdeTarget):
     name = "Agents"
-    # .agent/ 目录作为公共 IDE 规范，默认不显示
+    # .agents/ 目录作为公共 IDE 规范，默认不显示
     # hidden 标记在 install.py 的 IDE_INFO 中已设为 True
 
     @property
     def agent_dir(self) -> Path:
-        """公共 .agent/ 目录。"""
-        return self.root / ".agent"
+        """公共 .agents/ 目录。"""
+        return self.root / ".agents"
 
     def init_rules(self, source_rules):
         """同步 rules 到 .agent/rules/（支持多源合并，前者优先）。
@@ -65,58 +68,68 @@ class AgentsTarget(IdeTarget):
                 except Exception as e:
                     print(f"{COLOR_RED}[!] Failed to copy rule {item.name}: {e}{COLOR_RESET}")
         if copied:
-            print(f"{COLOR_GREEN}[OK] .agent/rules/: {copied} files copied{COLOR_RESET}")
+            print(f"{COLOR_GREEN}[OK] .agents/rules/: {copied} files copied{COLOR_RESET}")
 
     def init_mcp(self, source_mcp_file: Path):
-        """同步 mcp 配置到 .agent/mcp/。"""
+        """同步 mcp 配置到 .agents/mcp/。"""
         if not source_mcp_file or not Path(source_mcp_file).exists():
             return
         dst_dir = self.agent_dir / "mcp"
         dst_dir.mkdir(parents=True, exist_ok=True)
         copy_file_safe(source_mcp_file, dst_dir / Path(source_mcp_file).name,
-                       f".agent/mcp/{Path(source_mcp_file).name}", self.force)
+                       f".agents/mcp/{Path(source_mcp_file).name}", self.force)
 
     def init_skills(self, source_skills_dir: Path):
-        """同步 skills 到 .agent/skills/（软链接方式）。"""
-        agents_skills_dir = self.agent_dir / "skills"
-        copy_skills_safe(source_skills_dir, agents_skills_dir, ".agent/skills/",
-                         self.force, self.include_skills, link=self.link_skills)
-        write_skills_index(source_skills_dir, agents_skills_dir / "README.md",
-                           "Agents", self.force, self.include_skills)
+        """同步 skills 到 .agents/skills/（软链接方式）。
 
+        .agents/skills/ 同时是安装落地处和 sync 源之一。为避免源=目标时
+        copy_skills_safe 在 force 模式下 rmtree 目标导致源被删，这里先解析出
+        目标绝对路径，从源列表中剔除与目标相同的源（自我复制无意义）。
+        """
+        agents_skills_dir = (self.agent_dir / "skills").resolve()
+        # 归一化源列表，剔除与目标重叠的源（避免 force 模式下自删）
         if isinstance(source_skills_dir, list):
-            srcs = [s for s in source_skills_dir if s.exists()]
+            srcs = [s for s in source_skills_dir if s and s.exists() and s.resolve() != agents_skills_dir]
+        elif source_skills_dir and source_skills_dir.exists() and source_skills_dir.resolve() != agents_skills_dir:
+            srcs = [source_skills_dir]
         else:
-            srcs = [source_skills_dir] if source_skills_dir.exists() else []
+            srcs = []
+
         if srcs:
-            seen = set()
-            skill_count = 0
-            for s in srcs:
-                for d in s.iterdir():
-                    if d.is_dir() and d.name not in seen:
-                        seen.add(d.name)
-                        skill_count += 1
-            print(f"{COLOR_GREEN}[OK] {skill_count} skills available in .agent/skills/{COLOR_RESET}")
+            copy_skills_safe(srcs, agents_skills_dir, ".agents/skills/",
+                             self.force, self.include_skills, link=self.link_skills)
+            write_skills_index(srcs, agents_skills_dir / "README.md",
+                               "Agents", self.force, self.include_skills)
+        else:
+            # 源与目标完全重叠（或无源）：仅生成索引
+            write_skills_index(agents_skills_dir, agents_skills_dir / "README.md",
+                               "Agents", self.force, self.include_skills)
+
+        # 统计 .agents/skills/ 下的 skill 数（含安装落地 + 其他源同步进来的）
+        if agents_skills_dir.exists():
+            skill_count = sum(1 for d in agents_skills_dir.iterdir()
+                              if d.is_dir() and not d.is_symlink())
+            print(f"{COLOR_GREEN}[OK] {skill_count} skills available in .agents/skills/{COLOR_RESET}")
 
     def init_manifest(self, source_agents_md: Path):
-        """同步 AGENTS.md 到 .agent/AGENTS.md。"""
+        """同步 AGENTS.md 到 .agents/AGENTS.md。"""
         if not source_agents_md or not Path(source_agents_md).exists():
             return
         copy_file_safe(source_agents_md, self.agent_dir / "AGENTS.md",
-                       ".agent/AGENTS.md", self.force)
+                       ".agents/AGENTS.md", self.force)
 
     def init_llm(self, source_rules_dir: Path):
-        """同步 subagents 到 .agent/subagents/。"""
+        """同步 subagents 到 .agents/subagents/。"""
         subagents_src = self.root / "config" / "subagents"
         if subagents_src.exists():
             dst = self.agent_dir / "subagents"
-            copy_dir_safe(subagents_src, dst, ".agent/subagents/", self.force)
+            copy_dir_safe(subagents_src, dst, ".agents/subagents/", self.force)
 
     def run(self, source_rules: Path, source_mcp_file: Path,
             source_skills_dir: Path, source_agents_md: Path) -> str:
-        """Agents 始终同步全部内容到 .agent/，不受 scope 限制。"""
+        """Agents 始终同步全部内容到 .agents/，不受 scope 限制。"""
         from lib.logging import COLOR_MAGENTA, COLOR_RESET
-        print(f"\n{COLOR_MAGENTA}--- {self.name} (.agent/) ---{COLOR_RESET}")
+        print(f"\n{COLOR_MAGENTA}--- {self.name} (.agents/) ---{COLOR_RESET}")
         self.init_rules(source_rules)
         self.init_mcp(source_mcp_file)
         self.init_skills(source_skills_dir)

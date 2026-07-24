@@ -178,7 +178,7 @@ def cmd_sync(args):
     targets = get_ide(ide_name, project_root=PROJECT_ROOT, force=args.force,
                       include_skills=include, scope=scope)
 
-    # 始终包含 Agents（.agent/ 公共 IDE 规范目录），即使不在用户选择的 IDE 列表中
+    # 始终包含 Agents（.agents/ 公共 IDE 规范目录），即使不在用户选择的 IDE 列表中
     if ide_name != "All" and ide_name != "Agents":
         if not any(getattr(t, 'name', '') == 'Agents' for t in targets):
             agents_targets = get_ide("Agents", project_root=PROJECT_ROOT, force=args.force,
