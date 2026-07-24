@@ -53,6 +53,31 @@ def get_enabled_skills(skill_yaml_path: Path) -> set:
     return set(data.get("enabled", []))
 
 
+def sync_enabled_from_sources(skill_yaml_path: Path) -> int:
+    """把 sources 记录的 skill 补入 enabled 清单（数据迁移）。
+
+    历史安装的 skill 可能只在 sources 里有记录但未进 enabled，
+    导致 sync 按 enabled 过滤时被跳过。此函数把 sources 的 key 全部补入 enabled，
+    保证已安装的 skill 都能被同步。返回新增的数量。
+    """
+    data = load_skill_yaml(skill_yaml_path)
+    sources = data.get("sources")
+    if not isinstance(sources, dict) or not sources:
+        return 0
+    enabled = data.get("enabled", [])
+    if not isinstance(enabled, list):
+        enabled = []
+    added = 0
+    for name in sources.keys():
+        if name not in enabled:
+            enabled.append(name)
+            added += 1
+    if added:
+        data["enabled"] = enabled
+        save_skill_yaml(skill_yaml_path, data)
+    return added
+
+
 def enable_skill(skill_yaml_path: Path, skill_name: str) -> bool:
     """启用技能，返回是否新增。"""
     data = load_skill_yaml(skill_yaml_path)

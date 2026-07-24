@@ -249,6 +249,10 @@ def cmd_sync(args):
     # 从 skill.yaml 读取启用清单（项目级），只同步启用的 skill
     skill_yaml = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
     if "skill" in scope and skill_yaml.exists():
+        # 数据迁移：把 sources 记录但未进 enabled 的 skill 补入 enabled
+        added = skills.sync_enabled_from_sources(skill_yaml)
+        if added:
+            hint(f"已自动启用 {added} 个历史安装的 skill（从 sources 补入 enabled）")
         enabled_set = skills.get_enabled_skills(skill_yaml)
         if enabled_set:
             # 合并命令行 --skills 白名单和 skill.yaml 的 enabled
